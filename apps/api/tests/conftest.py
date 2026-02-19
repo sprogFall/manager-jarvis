@@ -30,6 +30,7 @@ from app.core.deps import get_current_admin  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.audit_log import AuditLog  # noqa: E402
+from app.models.system_setting import SystemSetting  # noqa: E402
 from app.models.task import TaskRecord  # noqa: E402
 from app.services.docker_service import DockerService  # noqa: E402
 
@@ -118,6 +119,7 @@ def reset_state(raw_client):
     with SessionLocal() as db:
         db.query(AuditLog).delete()
         db.query(TaskRecord).delete()
+        db.query(SystemSetting).delete()
         db.commit()
 
     for folder in (RUNTIME_DIR / "stacks", RUNTIME_DIR / "uploads", RUNTIME_DIR / "exports", RUNTIME_DIR / "workspaces"):

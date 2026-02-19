@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { AuditPanel } from '@/components/panels/audit-panel';
 import { ContainerPanel } from '@/components/panels/container-panel';
 import { ImagePanel } from '@/components/panels/image-panel';
+import { ProxyPanel } from '@/components/panels/proxy-panel';
 import { StackPanel } from '@/components/panels/stack-panel';
 import { TaskPanel } from '@/components/panels/task-panel';
 import { ApiClient } from '@/lib/api';
@@ -35,6 +36,11 @@ const SECTION_META = {
     title: '审计日志',
     description: '审阅关键操作轨迹，确认资源和执行结果。',
   },
+  proxy: {
+    label: '网络',
+    title: '代理设置',
+    description: '配置外网代理，统一处理 GitHub/Gitee 访问请求。',
+  },
 } as const;
 
 type Section = keyof typeof SECTION_META;
@@ -60,6 +66,8 @@ const noClient = {
   runStackAction: async () => ({ task_id: 'task-demo' }),
   getTasks: async () => [],
   getAuditLogs: async () => [],
+  getProxyConfig: async () => ({ proxy_url: null }),
+  updateProxyConfig: async () => ({ proxy_url: null }),
 };
 
 export function AppShell({ client, onLogout }: AppShellProps) {
@@ -101,6 +109,9 @@ export function AppShell({ client, onLogout }: AppShellProps) {
     }
     if (section === 'tasks') {
       return <TaskPanel loadTasks={() => api.getTasks()} />;
+    }
+    if (section === 'proxy') {
+      return <ProxyPanel loadProxy={() => api.getProxyConfig()} updateProxy={(payload) => api.updateProxyConfig(payload)} />;
     }
     return <AuditPanel loadAuditLogs={() => api.getAuditLogs()} />;
   }

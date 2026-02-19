@@ -200,12 +200,15 @@ def task_export_logs(params: dict[str, Any]) -> dict[str, Any]:
 
 def task_git_clone(params: dict[str, Any]) -> dict[str, Any]:
     from app.services.git_service import GitService
+    from app.services.proxy_service import get_runtime_proxy_url
 
     service = GitService()
+    proxy_url = get_runtime_proxy_url()
     workspace_id, workspace_path = service.clone(
         repo_url=params["repo_url"],
         branch=params.get("branch"),
         token=params.get("token"),
+        proxy_url=proxy_url,
     )
     info = service.list_workspace(workspace_id)
     return {**info, "workspace_path": str(workspace_path)}
@@ -238,9 +241,12 @@ def task_load_image_from_url(params: dict[str, Any]) -> dict[str, Any]:
     import urllib.request
     import uuid as _uuid
 
+    from app.services.proxy_service import get_runtime_proxy_url
+
     docker_service = DockerService()
     url = params["url"]
     auth_token = params.get("auth_token")
+    proxy_url = get_runtime_proxy_url()
 
     # Determine filename from URL path
     url_path = url.split("?")[0].rstrip("/")
@@ -257,8 +263,12 @@ def task_load_image_from_url(params: dict[str, Any]) -> dict[str, Any]:
         request.add_header("Authorization", f"Bearer {auth_token}")
 
     ctx = ssl.create_default_context()
+    handlers: list = [urllib.request.HTTPSHandler(context=ctx)]
+    if proxy_url:
+        handlers.insert(0, urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url}))
+    opener = urllib.request.build_opener(*handlers)
     try:
-        with urllib.request.urlopen(request, context=ctx, timeout=600) as response:
+        with opener.open(request, timeout=600) as response:
             # Honour Content-Disposition filename if present
             content_disposition = response.headers.get("Content-Disposition", "")
             if "filename=" in content_disposition:
@@ -302,4 +312,3 @@ def register_default_handlers(task_manager: TaskManager) -> None:
     task_manager.register("image.git.clone", task_git_clone)
     task_manager.register("image.git.build", task_build_from_workspace)
     task_manager.register("image.load.url", task_load_image_from_url)
-

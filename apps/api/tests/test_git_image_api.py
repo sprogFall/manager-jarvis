@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 from app.services.git_service import GitService
@@ -166,6 +167,28 @@ class TestGitServiceUnit:
 
         with _pytest.raises(ValueError):
             _validate_workspace_id("../../../etc/passwd!!!!!!!!!!!!!!")
+
+
+
+    def test_clone_applies_proxy_env(self, monkeypatch):
+        captured = {}
+
+        def fake_run(cmd, check, capture_output, timeout, env):
+            captured['cmd'] = cmd
+            captured['env'] = env
+            return subprocess.CompletedProcess(cmd, 0, b'', b'')
+
+        monkeypatch.setattr(subprocess, 'run', fake_run)
+
+        service = GitService()
+        workspace_id, _ = service.clone(
+            repo_url='https://github.com/user/repo.git',
+            proxy_url='http://127.0.0.1:7890',
+        )
+
+        assert captured['env']['HTTP_PROXY'] == 'http://127.0.0.1:7890'
+        assert captured['env']['HTTPS_PROXY'] == 'http://127.0.0.1:7890'
+        service.cleanup(workspace_id)
 
     def test_list_workspace_excludes_git_dir(self, runtime_paths):
         ws_id = "9" * 32

@@ -102,3 +102,11 @@ export interface LoadFromUrlPayload {
   url: string;
   auth_token?: string;
 }
+
+export interface ProxyConfig {
+  proxy_url: string | null;
+}
+
+export interface UpdateProxyPayload {
+  proxy_url: string | null;
+}

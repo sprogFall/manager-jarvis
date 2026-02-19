@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 from app.core.config import get_settings
+from app.services.proxy_service import build_proxy_env
 
 settings = get_settings()
 
@@ -18,6 +19,7 @@ class GitService:
         repo_url: str,
         branch: str | None = None,
         token: str | None = None,
+        proxy_url: str | None = None,
     ) -> tuple[str, Path]:
         """Clone a git repo into a new workspace. Returns (workspace_id, workspace_path)."""
         workspace_id = uuid.uuid4().hex
@@ -31,6 +33,7 @@ class GitService:
         cmd.extend([clone_url, str(workspace_path)])
 
         env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+        env = build_proxy_env(env, proxy_url)
         try:
             subprocess.run(cmd, check=True, capture_output=True, timeout=300, env=env)
         except subprocess.CalledProcessError as exc:

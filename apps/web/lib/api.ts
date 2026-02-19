@@ -7,10 +7,12 @@ import type {
   LoadFromUrlPayload,
   LoginPayload,
   PullImagePayload,
+  ProxyConfig,
   StackSummary,
   TaskRecord,
   TaskResponse,
   TokenResponse,
+  UpdateProxyPayload,
   WorkspaceInfo,
 } from '@/lib/types';
 
@@ -146,6 +148,17 @@ export class ApiClient {
   loadFromUrl(payload: LoadFromUrlPayload): Promise<TaskResponse> {
     return this.request<TaskResponse>('/api/v1/images/load-url', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  getProxyConfig(): Promise<ProxyConfig> {
+    return this.request<ProxyConfig>('/api/v1/system/proxy', { method: 'GET' });
+  }
+
+  updateProxyConfig(payload: UpdateProxyPayload): Promise<ProxyConfig> {
+    return this.request<ProxyConfig>('/api/v1/system/proxy', {
+      method: 'PUT',
       body: JSON.stringify(payload),
     });
   }

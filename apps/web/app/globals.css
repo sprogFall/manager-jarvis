@@ -481,6 +481,10 @@ button:disabled,
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto;
 }
 
+.form-grid-proxy {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .form-grid label {
   display: grid;
   gap: 6px;
@@ -694,7 +698,8 @@ tbody tr:hover {
 @media (max-width: 1200px) {
   .form-grid,
   .form-grid-pull,
-  .form-grid-url {
+  .form-grid-url,
+  .form-grid-proxy {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -792,7 +797,8 @@ tbody tr:hover {
 
   .form-grid,
   .form-grid-pull,
-  .form-grid-url {
+  .form-grid-url,
+  .form-grid-proxy {
     grid-template-columns: 1fr;
   }
 

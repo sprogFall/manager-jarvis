@@ -5,7 +5,7 @@ from app.core.config import get_settings
 from app.core.security import get_password_hash
 from app.db.base import Base
 from app.db.session import engine
-from app.models import AuditLog, TaskRecord, User  # noqa: F401
+from app.models import AuditLog, SystemSetting, TaskRecord, User  # noqa: F401
 
 settings = get_settings()
 
