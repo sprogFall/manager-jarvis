@@ -1,0 +1,62 @@
+name: build-offline-image
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  package-api-image:
+    if: >-
+      ${{
+        !startsWith(github.event.head_commit.message, 'doc:')
+        && !startsWith(github.event.head_commit.message, 'docs:')
+        && !startsWith(github.event.head_commit.message, 'doc ')
+        && !startsWith(github.event.head_commit.message, 'docs ')
+        && !startsWith(github.event.head_commit.message, 'doc(')
+        && !startsWith(github.event.head_commit.message, 'docs(')
+        && github.event.head_commit.message != 'doc'
+        && github.event.head_commit.message != 'docs'
+      }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: prepare names
+        id: meta
+        run: |
+          short_sha="${GITHUB_SHA::12}"
+          echo "image_name=manager-jarvis-api" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "tar_name=manager-jarvis-api-${short_sha}.tar" >> "$GITHUB_OUTPUT"
+
+      - name: setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: build offline image tar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          tags: ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}
+          outputs: type=docker,dest=/tmp/${{ steps.meta.outputs.tar_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+
+      - name: upload tar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.image_name }}-${{ steps.meta.outputs.image_tag }}
+          path: /tmp/${{ steps.meta.outputs.tar_name }}
+          compression-level: 0
+          retention-days: 7
+
+      - name: write load command
+        run: |
+          echo "离线加载命令: \`docker load -i ${{ steps.meta.outputs.tar_name }}\`" >> "$GITHUB_STEP_SUMMARY"
