@@ -151,22 +151,24 @@ export function ContainerPanel({ loadContainers, actionContainer, removeContaine
                   const rowBusy = Boolean(busyAction && busyAction.startsWith(`${item.id}:`));
                   return (
                     <tr key={item.id}>
-                      <td>
+                      <td data-label="名称">
                         <div className="cell-main">{item.name}</div>
                         <div className="cell-sub mono">{item.id.slice(0, 12)}</div>
                       </td>
-                      <td className="mono">{item.image}</td>
-                      <td>
+                      <td data-label="镜像" className="mono">
+                        {item.image}
+                      </td>
+                      <td data-label="状态">
                         <span className={`status status-${item.status}`}>{item.status}</span>
                         <div className="cell-sub">{item.state}</div>
                       </td>
-                      <td>{item.stats ? `${item.stats.cpu_percent.toFixed(1)}%` : '-'}</td>
-                      <td>
+                      <td data-label="CPU">{item.stats ? `${item.stats.cpu_percent.toFixed(1)}%` : '-'}</td>
+                      <td data-label="内存">
                         {item.stats
                           ? `${formatBytes(item.stats.memory_usage)} / ${formatBytes(item.stats.memory_limit)}`
                           : '-'}
                       </td>
-                      <td>
+                      <td data-label="动作">
                         <div className="row-actions">
                           <button
                             type="button"

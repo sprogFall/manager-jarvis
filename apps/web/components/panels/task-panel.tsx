@@ -105,13 +105,15 @@ export function TaskPanel({ loadTasks }: TaskPanelProps) {
             {!loading
               ? tasks.map((task) => (
                   <tr key={task.id}>
-                    <td className="mono">{task.id}</td>
-                    <td>{task.task_type}</td>
-                    <td>
+                    <td data-label="ID" className="mono">
+                      {task.id}
+                    </td>
+                    <td data-label="类型">{task.task_type}</td>
+                    <td data-label="状态">
                       <span className={`status status-${task.status}`}>{task.status}</span>
                     </td>
-                    <td>{task.resource_id ?? '-'}</td>
-                    <td>{formatTime(task.created_at)}</td>
+                    <td data-label="资源">{task.resource_id ?? '-'}</td>
+                    <td data-label="创建时间">{formatTime(task.created_at)}</td>
                   </tr>
                 ))
               : null}

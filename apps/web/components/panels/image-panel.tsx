@@ -444,10 +444,12 @@ export function ImagePanel({
             {!loading
               ? images.map((item) => (
                   <tr key={item.id}>
-                    <td>{item.tags.join(', ') || '<none>'}</td>
-                    <td className="mono">{item.id.slice(0, 18)}</td>
-                    <td>{formatBytes(item.size)}</td>
-                    <td>
+                    <td data-label="Tag">{item.tags.join(', ') || '<none>'}</td>
+                    <td data-label="镜像 ID" className="mono">
+                      {item.id.slice(0, 18)}
+                    </td>
+                    <td data-label="体积">{formatBytes(item.size)}</td>
+                    <td data-label="动作">
                       <button
                         type="button"
                         className="btn btn-danger btn-sm"

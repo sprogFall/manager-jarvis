@@ -105,11 +105,11 @@ export function AuditPanel({ loadAuditLogs }: AuditPanelProps) {
             {!loading
               ? records.map((record) => (
                   <tr key={record.id}>
-                    <td>{formatTime(record.created_at)}</td>
-                    <td>{record.username ?? '-'}</td>
-                    <td>{record.action}</td>
-                    <td>{record.resource_id ?? '-'}</td>
-                    <td>
+                    <td data-label="时间">{formatTime(record.created_at)}</td>
+                    <td data-label="用户">{record.username ?? '-'}</td>
+                    <td data-label="动作">{record.action}</td>
+                    <td data-label="资源">{record.resource_id ?? '-'}</td>
+                    <td data-label="状态">
                       <span className={`status status-${record.status}`}>{record.status}</span>
                     </td>
                   </tr>
