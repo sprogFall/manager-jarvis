@@ -1,0 +1,78 @@
+export interface ContainerStats {
+  cpu_percent: number;
+  memory_usage: number;
+  memory_limit: number;
+  memory_percent: number;
+}
+
+export interface ContainerSummary {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  state: string;
+  ports: string[];
+  stats: ContainerStats | null;
+}
+
+export interface ImageSummary {
+  id: string;
+  tags: string[];
+  size: number;
+  created: string;
+}
+
+export interface StackSummary {
+  name: string;
+  path: string;
+  compose_file: string;
+  services: Array<Record<string, unknown>>;
+}
+
+export interface TaskRecord {
+  id: string;
+  task_type: string;
+  status: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  params: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  retry_of: string | null;
+  created_by: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface AuditLogRecord {
+  id: number;
+  user_id: number | null;
+  username: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  status: string;
+  detail: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
+export interface LoginPayload {
+  username: string;
+  password: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+}
+
+export interface PullImagePayload {
+  image: string;
+  tag?: string;
+}
+
+export interface TaskResponse {
+  task_id: string;
+}

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+.env
+.venv/
+.pytest_cache/
+*.egg-info/
+node_modules/
+.next/
+dist/
+coverage/
+apps/api/tests/.runtime/
+.gh-helper-cache/
