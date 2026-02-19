@@ -76,3 +76,29 @@ export interface PullImagePayload {
 export interface TaskResponse {
   task_id: string;
 }
+
+export interface GitClonePayload {
+  repo_url: string;
+  branch?: string;
+  token?: string;
+}
+
+export interface WorkspaceInfo {
+  workspace_id: string;
+  dockerfiles: string[];
+  directories: string[];
+}
+
+export interface BuildFromWorkspacePayload {
+  tag: string;
+  context_path?: string;
+  dockerfile?: string;
+  no_cache?: boolean;
+  pull?: boolean;
+  cleanup_after?: boolean;
+}
+
+export interface LoadFromUrlPayload {
+  url: string;
+  auth_token?: string;
+}

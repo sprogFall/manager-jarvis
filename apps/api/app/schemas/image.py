@@ -38,3 +38,29 @@ class DeleteImageRequest(BaseModel):
 class SaveImageRequest(BaseModel):
     image: str = Field(min_length=1)
     filename: str | None = None
+
+
+class GitCloneRequest(BaseModel):
+    repo_url: str = Field(min_length=1)
+    branch: str | None = None
+    token: str | None = None  # personal access token for private repos
+
+
+class WorkspaceInfo(BaseModel):
+    workspace_id: str
+    dockerfiles: list[str]
+    directories: list[str]
+
+
+class BuildFromWorkspaceRequest(BaseModel):
+    tag: str = Field(min_length=1)
+    context_path: str = "."
+    dockerfile: str = "Dockerfile"
+    no_cache: bool = False
+    pull: bool = False
+    cleanup_after: bool = True  # auto-remove workspace after build
+
+
+class LoadFromUrlRequest(BaseModel):
+    url: str = Field(min_length=1)
+    auth_token: str | None = None  # Bearer token for private GitHub/Gitee release assets

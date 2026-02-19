@@ -22,6 +22,7 @@ os.environ.setdefault("ADMIN_PASSWORD", "admin123456")
 os.environ.setdefault("STACKS_DIR", str((RUNTIME_DIR / "stacks").resolve()))
 os.environ.setdefault("UPLOAD_DIR", str((RUNTIME_DIR / "uploads").resolve()))
 os.environ.setdefault("EXPORT_DIR", str((RUNTIME_DIR / "exports").resolve()))
+os.environ.setdefault("WORKSPACES_DIR", str((RUNTIME_DIR / "workspaces").resolve()))
 os.environ.setdefault("MAX_UPLOAD_SIZE_MB", "50")
 os.environ.setdefault("ENABLE_WEB_TERMINAL", "true")
 
@@ -101,6 +102,7 @@ def prepare_runtime() -> None:
     (RUNTIME_DIR / "stacks").mkdir(parents=True, exist_ok=True)
     (RUNTIME_DIR / "uploads").mkdir(parents=True, exist_ok=True)
     (RUNTIME_DIR / "exports").mkdir(parents=True, exist_ok=True)
+    (RUNTIME_DIR / "workspaces").mkdir(parents=True, exist_ok=True)
 
 
 @pytest.fixture
@@ -118,7 +120,7 @@ def reset_state(raw_client):
         db.query(TaskRecord).delete()
         db.commit()
 
-    for folder in (RUNTIME_DIR / "stacks", RUNTIME_DIR / "uploads", RUNTIME_DIR / "exports"):
+    for folder in (RUNTIME_DIR / "stacks", RUNTIME_DIR / "uploads", RUNTIME_DIR / "exports", RUNTIME_DIR / "workspaces"):
         folder.mkdir(parents=True, exist_ok=True)
         for child in folder.iterdir():
             if child.is_file() or child.is_symlink():
@@ -182,4 +184,5 @@ def runtime_paths() -> dict[str, Path]:
         "stacks": RUNTIME_DIR / "stacks",
         "uploads": RUNTIME_DIR / "uploads",
         "exports": RUNTIME_DIR / "exports",
+        "workspaces": RUNTIME_DIR / "workspaces",
     }

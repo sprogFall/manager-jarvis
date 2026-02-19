@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     stacks_dir: str = Field(default="./data/stacks", alias="STACKS_DIR")
     upload_dir: str = Field(default="./data/uploads", alias="UPLOAD_DIR")
     export_dir: str = Field(default="./data/exports", alias="EXPORT_DIR")
+    workspaces_dir: str = Field(default="./data/workspaces", alias="WORKSPACES_DIR")
     max_upload_size_mb: int = Field(default=2048, alias="MAX_UPLOAD_SIZE_MB")
     enable_web_terminal: bool = Field(default=True, alias="ENABLE_WEB_TERMINAL")
 
@@ -39,6 +40,10 @@ class Settings(BaseSettings):
     @property
     def export_path(self) -> Path:
         return Path(self.export_dir).resolve()
+
+    @property
+    def workspaces_path(self) -> Path:
+        return Path(self.workspaces_dir).resolve()
 
 
 @lru_cache(maxsize=1)

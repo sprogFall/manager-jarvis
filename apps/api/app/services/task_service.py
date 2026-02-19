@@ -198,6 +198,99 @@ def task_export_logs(params: dict[str, Any]) -> dict[str, Any]:
     return {"file": str(output), "size": output.stat().st_size}
 
 
+def task_git_clone(params: dict[str, Any]) -> dict[str, Any]:
+    from app.services.git_service import GitService
+
+    service = GitService()
+    workspace_id, workspace_path = service.clone(
+        repo_url=params["repo_url"],
+        branch=params.get("branch"),
+        token=params.get("token"),
+    )
+    info = service.list_workspace(workspace_id)
+    return {**info, "workspace_path": str(workspace_path)}
+
+
+def task_build_from_workspace(params: dict[str, Any]) -> dict[str, Any]:
+    from app.services.git_service import GitService
+
+    docker_service = DockerService()
+    git_service = GitService()
+    workspace_id = params["workspace_id"]
+    try:
+        workspace_path = git_service.get_workspace_path(workspace_id)
+        context_rel = params.get("context_path") or "."
+        build_path = str((workspace_path / context_rel).resolve())
+        return docker_service.build_image(
+            tag=params["tag"],
+            path=build_path,
+            dockerfile=params.get("dockerfile", "Dockerfile"),
+            no_cache=params.get("no_cache", False),
+            pull=params.get("pull", False),
+        )
+    finally:
+        if params.get("cleanup_after", True):
+            git_service.cleanup(workspace_id)
+
+
+def task_load_image_from_url(params: dict[str, Any]) -> dict[str, Any]:
+    import ssl
+    import urllib.request
+    import uuid as _uuid
+
+    docker_service = DockerService()
+    url = params["url"]
+    auth_token = params.get("auth_token")
+
+    # Determine filename from URL path
+    url_path = url.split("?")[0].rstrip("/")
+    filename = url_path.split("/")[-1] if "/" in url_path else "image.tar"
+    if not (filename.endswith(".tar") or filename.endswith(".tar.gz")):
+        filename += ".tar"
+
+    settings.upload_path.mkdir(parents=True, exist_ok=True)
+    temp_path = settings.upload_path / f"url_{_uuid.uuid4().hex}_{Path(filename).name}"
+
+    max_size = settings.max_upload_size_mb * 1024 * 1024
+    request = urllib.request.Request(url)
+    if auth_token:
+        request.add_header("Authorization", f"Bearer {auth_token}")
+
+    ctx = ssl.create_default_context()
+    try:
+        with urllib.request.urlopen(request, context=ctx, timeout=600) as response:
+            # Honour Content-Disposition filename if present
+            content_disposition = response.headers.get("Content-Disposition", "")
+            if "filename=" in content_disposition:
+                cd_filename = content_disposition.split("filename=")[-1].strip('" ')
+                if cd_filename:
+                    filename = cd_filename
+                    temp_path = settings.upload_path / f"url_{_uuid.uuid4().hex}_{Path(filename).name}"
+
+            total = 0
+            with temp_path.open("wb") as fp:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > max_size:
+                        fp.close()
+                        temp_path.unlink(missing_ok=True)
+                        raise ValueError(
+                            f"Download exceeds size limit of {settings.max_upload_size_mb} MB"
+                        )
+                    fp.write(chunk)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+
+    try:
+        return docker_service.load_image_from_file(temp_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 def register_default_handlers(task_manager: TaskManager) -> None:
     task_manager.register("image.pull", task_pull_image)
     task_manager.register("image.build", task_build_image)
@@ -206,3 +299,7 @@ def register_default_handlers(task_manager: TaskManager) -> None:
     task_manager.register("image.save", task_save_image)
     task_manager.register("stack.action", task_stack_action)
     task_manager.register("container.logs.export", task_export_logs)
+    task_manager.register("image.git.clone", task_git_clone)
+    task_manager.register("image.git.build", task_build_from_workspace)
+    task_manager.register("image.load.url", task_load_image_from_url)
+

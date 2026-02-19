@@ -1,13 +1,17 @@
 import type {
   AuditLogRecord,
+  BuildFromWorkspacePayload,
   ContainerSummary,
+  GitClonePayload,
   ImageSummary,
+  LoadFromUrlPayload,
   LoginPayload,
   PullImagePayload,
   StackSummary,
   TaskRecord,
   TaskResponse,
   TokenResponse,
+  WorkspaceInfo,
 } from '@/lib/types';
 
 function trimSlash(value: string): string {
@@ -113,6 +117,37 @@ export class ApiClient {
 
   getAuditLogs(): Promise<AuditLogRecord[]> {
     return this.request<AuditLogRecord[]>('/api/v1/audit-logs');
+  }
+
+  gitClone(payload: GitClonePayload): Promise<TaskResponse> {
+    return this.request<TaskResponse>('/api/v1/images/git/clone', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  getWorkspace(workspaceId: string): Promise<WorkspaceInfo> {
+    return this.request<WorkspaceInfo>(`/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}`);
+  }
+
+  buildFromWorkspace(workspaceId: string, payload: BuildFromWorkspacePayload): Promise<TaskResponse> {
+    return this.request<TaskResponse>(
+      `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/build`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+  }
+
+  deleteWorkspace(workspaceId: string): Promise<void> {
+    return this.request<void>(`/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  loadFromUrl(payload: LoadFromUrlPayload): Promise<TaskResponse> {
+    return this.request<TaskResponse>('/api/v1/images/load-url', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 }
 

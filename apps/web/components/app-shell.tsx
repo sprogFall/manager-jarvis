@@ -31,6 +31,11 @@ const noClient = {
   getImages: async () => [],
   pullImage: async () => ({ task_id: 'task-demo' }),
   deleteImage: async () => undefined,
+  gitClone: async () => ({ task_id: 'task-demo' }),
+  getWorkspace: async () => ({ workspace_id: '', dockerfiles: [], directories: [] }),
+  buildFromWorkspace: async () => ({ task_id: 'task-demo' }),
+  deleteWorkspace: async () => undefined,
+  loadFromUrl: async () => ({ task_id: 'task-demo' }),
   getStacks: async () => [],
   runStackAction: async () => ({ task_id: 'task-demo' }),
   getTasks: async () => [],
@@ -75,6 +80,11 @@ export function AppShell({ client, onLogout }: AppShellProps) {
           loadImages={() => api.getImages()}
           pullImage={(payload) => api.pullImage(payload)}
           deleteImage={(image) => api.deleteImage(image)}
+          gitClone={(payload) => api.gitClone(payload)}
+          getWorkspace={(id) => api.getWorkspace(id)}
+          buildFromWorkspace={(id, payload) => api.buildFromWorkspace(id, payload)}
+          deleteWorkspace={(id) => api.deleteWorkspace(id)}
+          loadFromUrl={(payload) => api.loadFromUrl(payload)}
         />
       );
     }
