@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { AuditPanel } from '@/components/panels/audit-panel';
 import { ContainerPanel } from '@/components/panels/container-panel';
@@ -9,15 +9,35 @@ import { StackPanel } from '@/components/panels/stack-panel';
 import { TaskPanel } from '@/components/panels/task-panel';
 import { ApiClient } from '@/lib/api';
 
-const SECTION_LABELS = {
-  containers: '容器',
-  images: '镜像',
-  stacks: '栈',
-  tasks: '任务',
-  audit: '审计',
+const SECTION_META = {
+  containers: {
+    label: '容器',
+    title: '容器总览',
+    description: '查看运行状态、资源占用并执行启停和重启操作。',
+  },
+  images: {
+    label: '镜像',
+    title: '镜像管理',
+    description: '统一处理拉取、删除、Git 构建与离线加载。',
+  },
+  stacks: {
+    label: '栈',
+    title: 'Compose 栈',
+    description: '管理 Compose 栈并触发 up/down/restart/pull。',
+  },
+  tasks: {
+    label: '任务',
+    title: '任务中心',
+    description: '追踪异步任务状态，快速定位失败和耗时步骤。',
+  },
+  audit: {
+    label: '审计',
+    title: '审计日志',
+    description: '审阅关键操作轨迹，确认资源和执行结果。',
+  },
 } as const;
 
-type Section = keyof typeof SECTION_LABELS;
+type Section = keyof typeof SECTION_META;
 
 interface AppShellProps {
   client?: ApiClient;
@@ -47,22 +67,10 @@ export function AppShell({ client, onLogout }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const api = client ?? noClient;
 
-  const sectionTitle = useMemo(() => {
-    switch (section) {
-      case 'containers':
-        return '容器总览';
-      case 'images':
-        return '镜像管理';
-      case 'stacks':
-        return 'Compose 栈';
-      case 'tasks':
-        return '任务中心';
-      case 'audit':
-        return '审计日志';
-      default:
-        return '';
-    }
-  }, [section]);
+  function switchSection(next: Section) {
+    setSection(next);
+    setMobileOpen(false);
+  }
 
   function renderSection() {
     if (section === 'containers') {
@@ -97,33 +105,49 @@ export function AppShell({ client, onLogout }: AppShellProps) {
     return <AuditPanel loadAuditLogs={() => api.getAuditLogs()} />;
   }
 
+  const currentSection = SECTION_META[section];
+  const sections = Object.keys(SECTION_META) as Section[];
+
   return (
     <div className="shell">
-      <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
+      {mobileOpen ? (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="关闭导航"
+          onClick={() => setMobileOpen(false)}
+        />
+      ) : null}
+
+      <aside className={`sidebar ${mobileOpen ? 'open' : ''}`} aria-label="侧边导航">
         <div className="brand">
-          <h1>Jarvis</h1>
-          <p>Host Docker Console</p>
+          <div className="brand-mark" aria-hidden="true">
+            MJ
+          </div>
+          <div>
+            <h1>Manager Jarvis</h1>
+            <p>Docker 运维控制台</p>
+          </div>
         </div>
 
         <nav>
-          {(Object.keys(SECTION_LABELS) as Section[]).map((item) => (
+          {sections.map((item) => (
             <button
               key={item}
               type="button"
-              className={item === section ? 'active' : ''}
-              onClick={() => {
-                setSection(item);
-                setMobileOpen(false);
-              }}
-              aria-label={SECTION_LABELS[item]}
+              className={`nav-item ${item === section ? 'active' : ''}`}
+              onClick={() => switchSection(item)}
+              aria-label={SECTION_META[item].label}
+              aria-current={item === section ? 'page' : undefined}
             >
-              {SECTION_LABELS[item]}
+              <span>{SECTION_META[item].label}</span>
+              <small>{SECTION_META[item].title}</small>
             </button>
           ))}
         </nav>
 
         {onLogout ? (
-          <button type="button" className="logout" onClick={onLogout}>
+          <button type="button" className="btn btn-danger logout" onClick={onLogout}>
             退出登录
           </button>
         ) : null}
@@ -131,10 +155,22 @@ export function AppShell({ client, onLogout }: AppShellProps) {
 
       <main className="content">
         <header className="topbar">
-          <button type="button" className="ghost mobile-menu" aria-label="打开导航" onClick={() => setMobileOpen((prev) => !prev)}>
-            菜单
-          </button>
-          <h2>{sectionTitle}</h2>
+          <div className="topbar-main">
+            <button
+              type="button"
+              className="btn btn-ghost mobile-menu"
+              aria-label="打开导航"
+              onClick={() => setMobileOpen((prev) => !prev)}
+            >
+              菜单
+            </button>
+            <div>
+              <p className="topbar-kicker">{currentSection.label}</p>
+              <h2>{currentSection.title}</h2>
+              <p className="muted">{currentSection.description}</p>
+            </div>
+          </div>
+          <span className="topbar-chip">实时管理</span>
         </header>
 
         <div className="content-body">{renderSection()}</div>

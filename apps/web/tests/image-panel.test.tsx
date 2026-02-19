@@ -26,6 +26,24 @@ const defaultProps = {
 };
 
 describe('ImagePanel', () => {
+  it('shows prominent loading feedback while waiting image list', async () => {
+    let resolveLoad: (value: ImageSummary[]) => void = () => undefined;
+    const loadImages = vi.fn().mockImplementation(
+      () =>
+        new Promise<ImageSummary[]>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+
+    render(<ImagePanel {...defaultProps} loadImages={loadImages} />);
+
+    expect(screen.getByText('正在加载镜像列表...')).toBeInTheDocument();
+
+    resolveLoad(images);
+
+    expect(await screen.findByText('nginx:latest')).toBeInTheDocument();
+  });
+
   it('loads image list and submits pull request', async () => {
     const user = userEvent.setup();
     const loadImages = vi.fn().mockResolvedValue(images);

@@ -28,7 +28,9 @@ export default function DashboardPage() {
         <div className="unauthorized-card">
           <h1>尚未登录</h1>
           <p>请先进入登录页获取访问令牌，再使用 Docker 管理功能。</p>
-          <Link href="/login">前往登录</Link>
+          <Link href="/login" className="btn btn-subtle unauthorized-link">
+            前往登录
+          </Link>
         </div>
       </main>
     );

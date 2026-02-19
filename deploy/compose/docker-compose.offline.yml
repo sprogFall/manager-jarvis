@@ -1,0 +1,21 @@
+services:
+  api:
+    image: ${JARVIS_IMAGE:-manager-jarvis:latest}
+    container_name: manager-jarvis-api
+    ports:
+      - "${JARVIS_PORT:-8000}:8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./jarvis.db}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123456}
+      - DOCKER_BASE_URL=${DOCKER_BASE_URL:-unix:///var/run/docker.sock}
+      - STACKS_DIR=/data/stacks
+      - UPLOAD_DIR=/data/uploads
+      - EXPORT_DIR=/data/exports
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-2048}
+      - ENABLE_WEB_TERMINAL=${ENABLE_WEB_TERMINAL:-true}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/data
+    restart: unless-stopped

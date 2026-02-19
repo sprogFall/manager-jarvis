@@ -19,6 +19,30 @@ const containers: ContainerSummary[] = [
 ];
 
 describe('ContainerPanel', () => {
+  it('shows prominent loading feedback while waiting data', async () => {
+    let resolveLoad: (value: ContainerSummary[]) => void = () => undefined;
+    const loadContainers = vi.fn().mockImplementation(
+      () =>
+        new Promise<ContainerSummary[]>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+
+    render(
+      <ContainerPanel
+        loadContainers={loadContainers}
+        actionContainer={vi.fn().mockResolvedValue(undefined)}
+        removeContainer={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.getByText('正在加载容器列表...')).toBeInTheDocument();
+
+    resolveLoad(containers);
+
+    expect(await screen.findByText('web')).toBeInTheDocument();
+  });
+
   it('loads containers and fires action', async () => {
     const user = userEvent.setup();
     const loadContainers = vi.fn().mockResolvedValue(containers);

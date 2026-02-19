@@ -9,11 +9,25 @@ interface TaskPanelProps {
   loadTasks: () => Promise<TaskRecord[]>;
 }
 
+interface Notice {
+  tone: 'error';
+  text: string;
+}
+
 export function TaskPanel({ loadTasks }: TaskPanelProps) {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   async function refresh() {
-    setTasks(await loadTasks());
+    setLoading(true);
+    try {
+      setTasks(await loadTasks());
+    } catch (error) {
+      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '任务列表加载失败' });
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -28,10 +42,23 @@ export function TaskPanel({ loadTasks }: TaskPanelProps) {
           <h2>任务中心</h2>
           <p>跟踪异步任务执行状态</p>
         </div>
-        <button type="button" className="ghost" onClick={() => void refresh()}>
-          刷新
+        <button type="button" className="btn btn-ghost" onClick={() => void refresh()} disabled={loading}>
+          {loading ? '刷新中...' : '刷新'}
         </button>
       </div>
+
+      {loading ? (
+        <div className="loading-banner" role="status" aria-live="polite">
+          <span className="spinner" aria-hidden="true" />
+          <span>正在加载任务列表...</span>
+        </div>
+      ) : null}
+
+      {notice ? (
+        <p className="notice notice-error" role="alert">
+          {notice.text}
+        </p>
+      ) : null}
 
       <div className="table-wrap">
         <table>
@@ -45,15 +72,49 @@ export function TaskPanel({ loadTasks }: TaskPanelProps) {
             </tr>
           </thead>
           <tbody>
-            {tasks.map((task) => (
-              <tr key={task.id}>
-                <td className="mono">{task.id}</td>
-                <td>{task.task_type}</td>
-                <td>{task.status}</td>
-                <td>{task.resource_id ?? '-'}</td>
-                <td>{formatTime(task.created_at)}</td>
+            {loading
+              ? Array.from({ length: 5 }).map((_, index) => (
+                  <tr key={`task-skeleton-${index}`} className="skeleton-row" aria-hidden="true">
+                    <td>
+                      <span className="skeleton-line" />
+                    </td>
+                    <td>
+                      <span className="skeleton-line" />
+                    </td>
+                    <td>
+                      <span className="skeleton-pill" />
+                    </td>
+                    <td>
+                      <span className="skeleton-line" />
+                    </td>
+                    <td>
+                      <span className="skeleton-line skeleton-short" />
+                    </td>
+                  </tr>
+                ))
+              : null}
+
+            {!loading && tasks.length === 0 ? (
+              <tr>
+                <td colSpan={5}>
+                  <div className="empty-state">暂无任务记录</div>
+                </td>
               </tr>
-            ))}
+            ) : null}
+
+            {!loading
+              ? tasks.map((task) => (
+                  <tr key={task.id}>
+                    <td className="mono">{task.id}</td>
+                    <td>{task.task_type}</td>
+                    <td>
+                      <span className={`status status-${task.status}`}>{task.status}</span>
+                    </td>
+                    <td>{task.resource_id ?? '-'}</td>
+                    <td>{formatTime(task.created_at)}</td>
+                  </tr>
+                ))
+              : null}
           </tbody>
         </table>
       </div>

@@ -20,8 +20,11 @@ export function LoginForm({ onSubmit, loading, error }: LoginFormProps) {
 
   return (
     <form className="login-card" onSubmit={submit}>
-      <h1>Manager Jarvis</h1>
-      <p className="muted">Docker 管理控制台</p>
+      <div className="login-head">
+        <span className="topbar-chip">管理控制台</span>
+        <h1>Manager Jarvis</h1>
+        <p className="muted">统一管理容器、镜像、Compose 栈与异步任务</p>
+      </div>
 
       <label>
         用户名
@@ -46,9 +49,13 @@ export function LoginForm({ onSubmit, loading, error }: LoginFormProps) {
         />
       </label>
 
-      {error ? <p className="error">{error}</p> : null}
+      {error ? (
+        <p className="notice notice-error" role="alert">
+          {error}
+        </p>
+      ) : null}
 
-      <button type="submit" disabled={loading}>
+      <button type="submit" className="btn" disabled={loading}>
         {loading ? '登录中...' : '登录'}
       </button>
     </form>

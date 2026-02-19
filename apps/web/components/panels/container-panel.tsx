@@ -11,43 +11,62 @@ interface ContainerPanelProps {
   removeContainer: (containerId: string) => Promise<void>;
 }
 
+type NoticeTone = 'success' | 'error' | 'info';
+
+interface Notice {
+  tone: NoticeTone;
+  text: string;
+}
+
+const SKELETON_ROWS = 4;
+
 export function ContainerPanel({ loadContainers, actionContainer, removeContainer }: ContainerPanelProps) {
   const [containers, setContainers] = useState<ContainerSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('');
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
   const countText = useMemo(() => `共 ${containers.length} 个容器`, [containers.length]);
 
   async function refresh() {
     setLoading(true);
-    setMessage('');
     try {
       const next = await loadContainers();
       setContainers(next);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '容器列表加载失败');
+      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '容器列表加载失败' });
     } finally {
       setLoading(false);
     }
   }
 
   async function runAction(containerId: string, action: 'start' | 'stop' | 'restart' | 'kill') {
+    const actionKey = `${containerId}:${action}`;
+    setBusyAction(actionKey);
+    setNotice({ tone: 'info', text: `正在执行 ${action}...` });
     try {
       await actionContainer(containerId, action);
-      setMessage(`已执行 ${action}`);
+      setNotice({ tone: 'success', text: `已执行 ${action}` });
       await refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '容器操作失败');
+      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '容器操作失败' });
+    } finally {
+      setBusyAction(null);
     }
   }
 
   async function runRemove(containerId: string) {
+    const actionKey = `${containerId}:remove`;
+    setBusyAction(actionKey);
+    setNotice({ tone: 'info', text: '正在删除容器...' });
     try {
       await removeContainer(containerId);
-      setMessage('容器已删除');
+      setNotice({ tone: 'success', text: '容器已删除' });
       await refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '删除失败');
+      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '删除失败' });
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -63,13 +82,23 @@ export function ContainerPanel({ loadContainers, actionContainer, removeContaine
           <h2>容器总览</h2>
           <p>{countText}</p>
         </div>
-        <button type="button" className="ghost" onClick={() => void refresh()}>
-          刷新
+        <button type="button" className="btn btn-ghost" onClick={() => void refresh()} disabled={loading}>
+          {loading ? '刷新中...' : '刷新'}
         </button>
       </div>
 
-      {message ? <p className="message">{message}</p> : null}
-      {loading ? <p className="muted">加载中...</p> : null}
+      {loading ? (
+        <div className="loading-banner" role="status" aria-live="polite">
+          <span className="spinner" aria-hidden="true" />
+          <span>正在加载容器列表...</span>
+        </div>
+      ) : null}
+
+      {notice ? (
+        <p className={`notice notice-${notice.tone}`} role={notice.tone === 'error' ? 'alert' : undefined}>
+          {notice.text}
+        </p>
+      ) : null}
 
       <div className="table-wrap">
         <table>
@@ -84,56 +113,112 @@ export function ContainerPanel({ loadContainers, actionContainer, removeContaine
             </tr>
           </thead>
           <tbody>
-            {containers.map((item) => (
-              <tr key={item.id}>
-                <td>{item.name}</td>
-                <td>{item.image}</td>
-                <td>
-                  <span className={`status status-${item.status}`}>{item.status}</span>
-                </td>
-                <td>{item.stats ? `${item.stats.cpu_percent.toFixed(1)}%` : '-'}</td>
-                <td>
-                  {item.stats
-                    ? `${formatBytes(item.stats.memory_usage)} / ${formatBytes(item.stats.memory_limit)}`
-                    : '-'}
-                </td>
-                <td>
-                  <div className="row-actions">
-                    <button
-                      type="button"
-                      onClick={() => void runAction(item.id, 'start')}
-                      aria-label={`启动 ${item.name}`}
-                    >
-                      启动
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void runAction(item.id, 'stop')}
-                      aria-label={`停止 ${item.name}`}
-                    >
-                      停止
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void runAction(item.id, 'restart')}
-                      aria-label={`重启 ${item.name}`}
-                    >
-                      重启
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void runAction(item.id, 'kill')}
-                      aria-label={`强制终止 ${item.name}`}
-                    >
-                      Kill
-                    </button>
-                    <button type="button" onClick={() => void runRemove(item.id)} aria-label={`删除 ${item.name}`}>
-                      删除
-                    </button>
-                  </div>
+            {loading
+              ? Array.from({ length: SKELETON_ROWS }).map((_, index) => (
+                  <tr key={`skeleton-${index}`} className="skeleton-row" aria-hidden="true">
+                    <td>
+                      <span className="skeleton-line skeleton-short" />
+                    </td>
+                    <td>
+                      <span className="skeleton-line" />
+                    </td>
+                    <td>
+                      <span className="skeleton-pill" />
+                    </td>
+                    <td>
+                      <span className="skeleton-line skeleton-short" />
+                    </td>
+                    <td>
+                      <span className="skeleton-line" />
+                    </td>
+                    <td>
+                      <span className="skeleton-line" />
+                    </td>
+                  </tr>
+                ))
+              : null}
+
+            {!loading && containers.length === 0 ? (
+              <tr>
+                <td colSpan={6}>
+                  <div className="empty-state">暂无容器数据</div>
                 </td>
               </tr>
-            ))}
+            ) : null}
+
+            {!loading
+              ? containers.map((item) => {
+                  const rowBusy = Boolean(busyAction && busyAction.startsWith(`${item.id}:`));
+                  return (
+                    <tr key={item.id}>
+                      <td>
+                        <div className="cell-main">{item.name}</div>
+                        <div className="cell-sub mono">{item.id.slice(0, 12)}</div>
+                      </td>
+                      <td className="mono">{item.image}</td>
+                      <td>
+                        <span className={`status status-${item.status}`}>{item.status}</span>
+                        <div className="cell-sub">{item.state}</div>
+                      </td>
+                      <td>{item.stats ? `${item.stats.cpu_percent.toFixed(1)}%` : '-'}</td>
+                      <td>
+                        {item.stats
+                          ? `${formatBytes(item.stats.memory_usage)} / ${formatBytes(item.stats.memory_limit)}`
+                          : '-'}
+                      </td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="btn btn-subtle btn-sm"
+                            disabled={rowBusy}
+                            onClick={() => void runAction(item.id, 'start')}
+                            aria-label={`启动 ${item.name}`}
+                          >
+                            启动
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-subtle btn-sm"
+                            disabled={rowBusy}
+                            onClick={() => void runAction(item.id, 'stop')}
+                            aria-label={`停止 ${item.name}`}
+                          >
+                            停止
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-subtle btn-sm"
+                            disabled={rowBusy}
+                            onClick={() => void runAction(item.id, 'restart')}
+                            aria-label={`重启 ${item.name}`}
+                          >
+                            重启
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-subtle btn-sm"
+                            disabled={rowBusy}
+                            onClick={() => void runAction(item.id, 'kill')}
+                            aria-label={`强制终止 ${item.name}`}
+                          >
+                            Kill
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            disabled={rowBusy}
+                            onClick={() => void runRemove(item.id)}
+                            aria-label={`删除 ${item.name}`}
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              : null}
           </tbody>
         </table>
       </div>

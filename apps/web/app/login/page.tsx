@@ -31,10 +31,12 @@ export default function LoginPage() {
   return (
     <main className="login-layout">
       <div className="backdrop" />
-      <LoginForm onSubmit={submit} loading={loading} error={error} />
-      <p className="login-hint">
-        默认账号可在后端 `.env` 中配置。返回 <Link href="/dashboard">仪表盘</Link>
-      </p>
+      <div className="login-content">
+        <LoginForm onSubmit={submit} loading={loading} error={error} />
+        <p className="login-hint">
+          默认账号可在后端 `.env` 中配置。返回 <Link href="/dashboard">仪表盘</Link>
+        </p>
+      </div>
     </main>
   );
 }
