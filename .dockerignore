@@ -1,10 +1,20 @@
 *
+!.dockerignore
+!Dockerfile
 !apps/
 !apps/api/
 !apps/api/**
+!apps/web/
+!apps/web/**
 
 apps/api/.venv/
 apps/api/.pytest_cache/
 apps/api/.mypy_cache/
 apps/api/.ruff_cache/
 apps/api/__pycache__/
+apps/api/tests/
+
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/tests/

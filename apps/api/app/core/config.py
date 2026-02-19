@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     workspaces_dir: str = Field(default="./data/workspaces", alias="WORKSPACES_DIR")
     max_upload_size_mb: int = Field(default=2048, alias="MAX_UPLOAD_SIZE_MB")
     enable_web_terminal: bool = Field(default=True, alias="ENABLE_WEB_TERMINAL")
+    frontend_dist_dir: str = Field(default="", alias="FRONTEND_DIST_DIR")
 
     @property
     def stacks_path(self) -> Path:
@@ -44,6 +45,15 @@ class Settings(BaseSettings):
     @property
     def workspaces_path(self) -> Path:
         return Path(self.workspaces_dir).resolve()
+
+    @property
+    def frontend_dist_path(self) -> Path | None:
+        if not self.frontend_dist_dir:
+            return None
+        path = Path(self.frontend_dist_dir).resolve()
+        if not path.is_dir():
+            return None
+        return path
 
 
 @lru_cache(maxsize=1)

@@ -30,9 +30,9 @@ jobs:
         id: meta
         run: |
           short_sha="${GITHUB_SHA::12}"
-          echo "image_name=manager-jarvis-api" >> "$GITHUB_OUTPUT"
+          echo "image_name=manager-jarvis" >> "$GITHUB_OUTPUT"
           echo "image_tag=${short_sha}" >> "$GITHUB_OUTPUT"
-          echo "tar_name=manager-jarvis-api-${short_sha}.tar" >> "$GITHUB_OUTPUT"
+          echo "tar_name=manager-jarvis-${short_sha}.tar" >> "$GITHUB_OUTPUT"
 
       - name: setup buildx
         uses: docker/setup-buildx-action@v3
@@ -41,7 +41,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: apps/api/Dockerfile
+          file: Dockerfile
           tags: ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}
           outputs: type=docker,dest=/tmp/${{ steps.meta.outputs.tar_name }}
           cache-from: type=gha

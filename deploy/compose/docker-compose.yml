@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: ../..
-      dockerfile: apps/api/Dockerfile
+      dockerfile: Dockerfile
     container_name: manager-jarvis-api
     ports:
       - "8000:8000"
@@ -19,8 +19,5 @@ services:
       - ENABLE_WEB_TERMINAL=${ENABLE_WEB_TERMINAL:-true}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - jarvis_data:/data
+      - ./data:/data
     restart: unless-stopped
-
-volumes:
-  jarvis_data:
