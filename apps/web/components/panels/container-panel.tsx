@@ -122,10 +122,14 @@ export function ContainerPanel({ loadContainers, loadContainerDetail, actionCont
     }
   }
 
+  function closeDetail() {
+    setSelectedDetailId(null);
+    setDetail(null);
+  }
+
   async function runLoadDetail(containerId: string) {
     if (selectedDetailId === containerId && detail) {
-      setSelectedDetailId(null);
-      setDetail(null);
+      closeDetail();
       return;
     }
 
@@ -148,167 +152,14 @@ export function ContainerPanel({ loadContainers, loadContainerDetail, actionCont
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 找到当前详情对应的容器摘要（用于详情页内操作按钮）
+  const detailContainer = detail ? containers.find((c) => c.id === selectedDetailId) : null;
+
   return (
     <section className="panel">
-      <div className="panel-head">
-        <div>
-          <h2>容器总览</h2>
-          <p>{countText}</p>
-        </div>
-        <button type="button" className="btn btn-ghost" onClick={() => void refresh()} disabled={loading}>
-          {loading ? '刷新中...' : '刷新'}
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="loading-banner" role="status" aria-live="polite">
-          <span className="spinner" aria-hidden="true" />
-          <span>正在加载容器列表...</span>
-        </div>
-      ) : null}
-
-      {notice ? (
-        <p className={`notice notice-${notice.tone}`} role={notice.tone === 'error' ? 'alert' : undefined}>
-          {notice.text}
-        </p>
-      ) : null}
-
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>镜像</th>
-              <th>状态</th>
-              <th>端口</th>
-              <th>动作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading
-              ? Array.from({ length: SKELETON_ROWS }).map((_, index) => (
-                  <tr key={`skeleton-${index}`} className="skeleton-row" aria-hidden="true">
-                    <td>
-                      <span className="skeleton-line skeleton-short" />
-                    </td>
-                    <td>
-                      <span className="skeleton-line" />
-                    </td>
-                    <td>
-                      <span className="skeleton-pill" />
-                    </td>
-                    <td>
-                      <span className="skeleton-line" />
-                    </td>
-                    <td>
-                      <span className="skeleton-line" />
-                    </td>
-                  </tr>
-                ))
-              : null}
-
-            {!loading && containers.length === 0 ? (
-              <tr>
-                <td colSpan={5}>
-                  <div className="empty-state">暂无容器数据</div>
-                </td>
-              </tr>
-            ) : null}
-
-            {!loading
-              ? containers.map((item) => {
-                  const rowBusy = Boolean(busyAction && busyAction.startsWith(`${item.id}:`));
-                  const detailBusy = detailLoadingId === item.id;
-                  const opened = selectedDetailId === item.id;
-                  return (
-                    <tr key={item.id}>
-                      <td data-label="名称">
-                        <div className="cell-main">{item.name}</div>
-                        <div className="cell-sub mono">{item.id.slice(0, 12)}</div>
-                      </td>
-                      <td data-label="镜像" className="mono cell-break">
-                        {item.image}
-                      </td>
-                      <td data-label="状态">
-                        <span className={`status status-${item.status}`}>{formatStatus(item.status)}</span>
-                        <div className="cell-sub">{item.state}</div>
-                        {item.stats ? (
-                          <div className="cell-sub">
-                            CPU {item.stats.cpu_percent.toFixed(1)}% | 内存 {formatBytes(item.stats.memory_usage)}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td data-label="端口" className="mono cell-break">
-                        {item.ports.length > 0 ? item.ports.map(formatPorts).join(', ') : '-'}
-                      </td>
-                      <td data-label="动作">
-                        <div className="row-actions">
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            disabled={rowBusy || detailBusy}
-                            onClick={() => void runLoadDetail(item.id)}
-                            aria-label={`查看 ${item.name} 详情`}
-                          >
-                            {detailBusy ? '加载中...' : opened ? '收起详情' : '详情'}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-subtle btn-sm"
-                            disabled={rowBusy}
-                            onClick={() => void runAction(item.id, 'start')}
-                            aria-label={`启动 ${item.name}`}
-                          >
-                            启动
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-subtle btn-sm"
-                            disabled={rowBusy}
-                            onClick={() => void runAction(item.id, 'stop')}
-                            aria-label={`停止 ${item.name}`}
-                          >
-                            停止
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-subtle btn-sm"
-                            disabled={rowBusy}
-                            onClick={() => void runAction(item.id, 'restart')}
-                            aria-label={`重启 ${item.name}`}
-                          >
-                            重启
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-subtle btn-sm"
-                            disabled={rowBusy}
-                            onClick={() => void runAction(item.id, 'kill')}
-                            aria-label={`强制终止 ${item.name}`}
-                          >
-                            强杀
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            disabled={rowBusy}
-                            onClick={() => void runRemove(item.id)}
-                            aria-label={`删除 ${item.name}`}
-                          >
-                            删除
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              : null}
-          </tbody>
-        </table>
-      </div>
-
       {detail ? (
-        <section className="detail-panel" aria-live="polite">
+        // ===== 详情独立视图 =====
+        <section aria-live="polite">
           <div className="detail-panel-head">
             <div>
               <h3>容器详情</h3>
@@ -317,16 +168,13 @@ export function ContainerPanel({ loadContainers, loadContainerDetail, actionCont
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setSelectedDetailId(null);
-                setDetail(null);
-              }}
+              onClick={closeDetail}
             >
-              关闭
+              ← 返回列表
             </button>
           </div>
 
-          <div className="detail-grid">
+          <div className="detail-grid" style={{ marginTop: 16 }}>
             <div>
               <span>名称</span>
               <strong>{detail.name}</strong>
@@ -346,7 +194,7 @@ export function ContainerPanel({ loadContainers, loadContainerDetail, actionCont
           </div>
 
           {detail.stats ? (
-            <div className="detail-grid">
+            <div className="detail-grid" style={{ marginTop: 12 }}>
               <div>
                 <span>CPU</span>
                 <strong>{detail.stats.cpu_percent.toFixed(1)}%</strong>
@@ -362,7 +210,17 @@ export function ContainerPanel({ loadContainers, loadContainerDetail, actionCont
             </div>
           ) : null}
 
-          <div className="detail-block">
+          {detailContainer ? (
+            <div className="row-actions" style={{ marginTop: 12 }}>
+              <button type="button" className="btn btn-subtle btn-sm" disabled={Boolean(busyAction)} onClick={() => void runAction(detailContainer.id, 'start')}>启动</button>
+              <button type="button" className="btn btn-subtle btn-sm" disabled={Boolean(busyAction)} onClick={() => void runAction(detailContainer.id, 'stop')}>停止</button>
+              <button type="button" className="btn btn-subtle btn-sm" disabled={Boolean(busyAction)} onClick={() => void runAction(detailContainer.id, 'restart')}>重启</button>
+              <button type="button" className="btn btn-subtle btn-sm" disabled={Boolean(busyAction)} onClick={() => void runAction(detailContainer.id, 'kill')}>强杀</button>
+              <button type="button" className="btn btn-danger btn-sm" disabled={Boolean(busyAction)} onClick={() => void runRemove(detailContainer.id)}>删除</button>
+            </div>
+          ) : null}
+
+          <div className="detail-block" style={{ marginTop: 12 }}>
             <h4>启动命令</h4>
             <pre className="detail-pre mono">{formatDetailText(detail.command)}</pre>
           </div>
@@ -387,7 +245,166 @@ export function ContainerPanel({ loadContainers, loadContainerDetail, actionCont
             <pre className="detail-pre mono">{formatDetailNetworks(detail.networks)}</pre>
           </div>
         </section>
-      ) : null}
+      ) : (
+        // ===== 列表视图 =====
+        <>
+          <div className="panel-head">
+            <div>
+              <h2>容器总览</h2>
+              <p>{countText}</p>
+            </div>
+            <button type="button" className="btn btn-ghost" onClick={() => void refresh()} disabled={loading}>
+              {loading ? '刷新中...' : '刷新'}
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="loading-banner" role="status" aria-live="polite">
+              <span className="spinner" aria-hidden="true" />
+              <span>正在加载容器列表...</span>
+            </div>
+          ) : null}
+
+          {notice ? (
+            <p className={`notice notice-${notice.tone}`} role={notice.tone === 'error' ? 'alert' : undefined}>
+              {notice.text}
+            </p>
+          ) : null}
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>镜像</th>
+                  <th>状态</th>
+                  <th>端口</th>
+                  <th>动作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading
+                  ? Array.from({ length: SKELETON_ROWS }).map((_, index) => (
+                      <tr key={`skeleton-${index}`} className="skeleton-row" aria-hidden="true">
+                        <td>
+                          <span className="skeleton-line skeleton-short" />
+                        </td>
+                        <td>
+                          <span className="skeleton-line" />
+                        </td>
+                        <td>
+                          <span className="skeleton-pill" />
+                        </td>
+                        <td>
+                          <span className="skeleton-line" />
+                        </td>
+                        <td>
+                          <span className="skeleton-line" />
+                        </td>
+                      </tr>
+                    ))
+                  : null}
+
+                {!loading && containers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>
+                      <div className="empty-state">暂无容器数据</div>
+                    </td>
+                  </tr>
+                ) : null}
+
+                {!loading
+                  ? containers.map((item) => {
+                      const rowBusy = Boolean(busyAction && busyAction.startsWith(`${item.id}:`));
+                      const detailBusy = detailLoadingId === item.id;
+                      return (
+                        <tr key={item.id}>
+                          <td data-label="名称">
+                            <div className="cell-main">{item.name}</div>
+                            <div className="cell-sub mono">{item.id.slice(0, 12)}</div>
+                          </td>
+                          <td data-label="镜像" className="mono cell-break">
+                            {item.image}
+                          </td>
+                          <td data-label="状态">
+                            <span className={`status status-${item.status}`}>{formatStatus(item.status)}</span>
+                            <div className="cell-sub">{item.state}</div>
+                            {item.stats ? (
+                              <div className="cell-sub">
+                                CPU {item.stats.cpu_percent.toFixed(1)}% | 内存 {formatBytes(item.stats.memory_usage)}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td data-label="端口" className="mono cell-break">
+                            {item.ports.length > 0 ? item.ports.map(formatPorts).join(', ') : '-'}
+                          </td>
+                          <td data-label="动作">
+                            <div className="row-actions">
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                disabled={rowBusy || detailBusy}
+                                onClick={() => void runLoadDetail(item.id)}
+                                aria-label={`查看 ${item.name} 详情`}
+                              >
+                                {detailBusy ? '加载中...' : '详情'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-subtle btn-sm"
+                                disabled={rowBusy}
+                                onClick={() => void runAction(item.id, 'start')}
+                                aria-label={`启动 ${item.name}`}
+                              >
+                                启动
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-subtle btn-sm"
+                                disabled={rowBusy}
+                                onClick={() => void runAction(item.id, 'stop')}
+                                aria-label={`停止 ${item.name}`}
+                              >
+                                停止
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-subtle btn-sm"
+                                disabled={rowBusy}
+                                onClick={() => void runAction(item.id, 'restart')}
+                                aria-label={`重启 ${item.name}`}
+                              >
+                                重启
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-subtle btn-sm"
+                                disabled={rowBusy}
+                                onClick={() => void runAction(item.id, 'kill')}
+                                aria-label={`强制终止 ${item.name}`}
+                              >
+                                强杀
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                disabled={rowBusy}
+                                onClick={() => void runRemove(item.id)}
+                                aria-label={`删除 ${item.name}`}
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  : null}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </section>
   );
 }

@@ -700,6 +700,7 @@ tbody tr:last-child td {
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+  white-space: nowrap;
   background: #f3f4f6;
   color: #4b5563;
 }

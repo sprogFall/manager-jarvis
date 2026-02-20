@@ -95,7 +95,7 @@ describe('ContainerPanel', () => {
     expect(screen.getByText('宿主机 8080 → 容器 80/tcp')).toBeInTheDocument();
   });
 
-  it('loads detail on demand', async () => {
+  it('loads detail on demand and hides list', async () => {
     const user = userEvent.setup();
     const loadContainerDetail = vi.fn().mockResolvedValue(detail);
 
@@ -109,6 +109,9 @@ describe('ContainerPanel', () => {
     );
 
     expect(await screen.findByText('web')).toBeInTheDocument();
+    // 列表标题可见
+    expect(screen.getByText('容器总览')).toBeInTheDocument();
+
     await user.click(screen.getByRole('button', { name: '查看 web 详情' }));
 
     await waitFor(() => {
@@ -116,5 +119,10 @@ describe('ContainerPanel', () => {
     });
     expect(await screen.findByText('容器详情')).toBeInTheDocument();
     expect(screen.getByText('nginx -g "daemon off;"')).toBeInTheDocument();
+
+    // 列表应隐藏
+    expect(screen.queryByText('容器总览')).not.toBeInTheDocument();
+    // 返回列表按钮应存在
+    expect(screen.getByRole('button', { name: '← 返回列表' })).toBeInTheDocument();
   });
 });
