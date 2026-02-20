@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -17,10 +18,14 @@ from app.schemas.image import (
     LoadFromUrlRequest,
     PullImageRequest,
     SaveImageRequest,
+    WorkspaceComposeActionRequest,
+    WorkspaceComposeInfo,
+    WorkspaceComposeUpdateRequest,
     WorkspaceInfo,
 )
 from app.services.docker_service import DockerService
 from app.services.git_service import GitService
+from app.services.stack_service import STACK_NAME_RE
 from app.services.task_service import get_task_manager
 from app.utils.confirm import check_confirmation, confirmation_header
 
@@ -236,6 +241,173 @@ def get_workspace(
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return WorkspaceInfo.model_validate(info)
+
+
+@router.get("/git/workspace/{workspace_id}/compose", response_model=WorkspaceComposeInfo)
+def get_workspace_compose(
+    workspace_id: str,
+    compose_path: str | None = Query(default=None),
+    source: Literal["repository", "custom"] = Query(default="repository"),
+    _: User = Depends(get_current_admin),
+) -> WorkspaceComposeInfo:
+    service = GitService()
+    try:
+        info = service.read_workspace_compose(workspace_id, compose_path=compose_path, source=source)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return WorkspaceComposeInfo.model_validate(info)
+
+
+@router.put("/git/workspace/{workspace_id}/compose")
+def update_workspace_compose(
+    workspace_id: str,
+    payload: WorkspaceComposeUpdateRequest,
+    user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    service = GitService()
+    try:
+        result = service.save_workspace_compose_override(
+            workspace_id,
+            content=payload.content,
+            compose_path=payload.compose_path,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    write_audit_log(
+        db,
+        action="image.git.compose.override.update",
+        resource_type="image",
+        resource_id=workspace_id,
+        user=user,
+        detail={"compose_path": result["compose_path"]},
+    )
+    return result
+
+
+@router.delete("/git/workspace/{workspace_id}/compose")
+def clear_workspace_compose(
+    workspace_id: str,
+    compose_path: str | None = Query(default=None),
+    user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    service = GitService()
+    try:
+        result = service.clear_workspace_compose_override(workspace_id, compose_path=compose_path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    write_audit_log(
+        db,
+        action="image.git.compose.override.clear",
+        resource_type="image",
+        resource_id=workspace_id,
+        user=user,
+        detail={"compose_path": result["compose_path"], "deleted": result["deleted"]},
+    )
+    return result
+
+
+@router.post("/git/workspace/{workspace_id}/compose/{action}")
+def run_workspace_compose_action(
+    workspace_id: str,
+    action: Literal["up", "down", "restart", "pull"],
+    payload: WorkspaceComposeActionRequest,
+    x_confirm_action: str | None = Depends(confirmation_header),
+    user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    if action == "up" and payload.force_recreate:
+        check_confirmation(payload.confirm, "force-recreate", x_confirm_action)
+
+    if payload.project_name and not STACK_NAME_RE.match(payload.project_name):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stack name")
+
+    service = GitService()
+    try:
+        target = service.resolve_workspace_compose_target(
+            workspace_id,
+            compose_path=payload.compose_path,
+            source=payload.source,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    compose_path = target["compose_path"]
+    project_name = payload.project_name or service.suggest_project_name(workspace_id, compose_path)
+    task_id = get_task_manager().enqueue(
+        db,
+        task_type="image.git.compose.action",
+        params={
+            "workspace_id": workspace_id,
+            "compose_path": compose_path,
+            "compose_file": target["compose_file"],
+            "project_directory": target["project_directory"],
+            "source": payload.source,
+            "project_name": project_name,
+            "action": action,
+            "force_recreate": payload.force_recreate,
+        },
+        created_by=user.username,
+        resource_type="stack",
+        resource_id=project_name,
+    )
+    write_audit_log(
+        db,
+        action=f"image.git.compose.{action}",
+        resource_type="image",
+        resource_id=workspace_id,
+        user=user,
+        detail={
+            "task_id": task_id,
+            "compose_path": compose_path,
+            "source": payload.source,
+            "project_name": project_name,
+            "force_recreate": payload.force_recreate,
+        },
+    )
+    return {"task_id": task_id}
+
+
+@router.post("/git/workspace/{workspace_id}/sync")
+def sync_workspace(
+    workspace_id: str,
+    user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    service = GitService()
+    try:
+        service.get_workspace_path(workspace_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    task_id = get_task_manager().enqueue(
+        db,
+        task_type="image.git.sync",
+        params={"workspace_id": workspace_id},
+        created_by=user.username,
+        resource_type="image",
+        resource_id=workspace_id,
+    )
+    write_audit_log(
+        db,
+        action="image.git.sync",
+        resource_type="image",
+        resource_id=workspace_id,
+        user=user,
+        detail={"task_id": task_id},
+    )
+    return {"task_id": task_id}
 
 
 @router.post("/git/workspace/{workspace_id}/build")

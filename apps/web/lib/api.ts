@@ -1,6 +1,7 @@
 import type {
   AuditLogRecord,
   BuildFromWorkspacePayload,
+  ComposeSource,
   ContainerDetail,
   ContainerSummary,
   GitClonePayload,
@@ -14,6 +15,11 @@ import type {
   TaskResponse,
   TokenResponse,
   UpdateProxyPayload,
+  WorkspaceComposeActionPayload,
+  WorkspaceComposeClearResult,
+  WorkspaceComposeInfo,
+  WorkspaceComposeUpdatePayload,
+  WorkspaceComposeUpdateResult,
   WorkspaceInfo,
 } from '@/lib/types';
 
@@ -122,6 +128,10 @@ export class ApiClient {
     return this.request<TaskRecord[]>('/api/v1/tasks');
   }
 
+  getTask(taskId: string): Promise<TaskRecord> {
+    return this.request<TaskRecord>(`/api/v1/tasks/${encodeURIComponent(taskId)}`);
+  }
+
   getAuditLogs(): Promise<AuditLogRecord[]> {
     return this.request<AuditLogRecord[]>('/api/v1/audit-logs');
   }
@@ -135,6 +145,59 @@ export class ApiClient {
 
   getWorkspace(workspaceId: string): Promise<WorkspaceInfo> {
     return this.request<WorkspaceInfo>(`/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}`);
+  }
+
+  getWorkspaceCompose(
+    workspaceId: string,
+    composePath?: string,
+    source: ComposeSource = 'repository',
+  ): Promise<WorkspaceComposeInfo> {
+    const query = new URLSearchParams({ source });
+    if (composePath) {
+      query.set('compose_path', composePath);
+    }
+    return this.request<WorkspaceComposeInfo>(
+      `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/compose?${query.toString()}`,
+    );
+  }
+
+  saveWorkspaceCompose(
+    workspaceId: string,
+    payload: WorkspaceComposeUpdatePayload,
+  ): Promise<WorkspaceComposeUpdateResult> {
+    return this.request<WorkspaceComposeUpdateResult>(
+      `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/compose`,
+      { method: 'PUT', body: JSON.stringify(payload) },
+    );
+  }
+
+  clearWorkspaceCompose(workspaceId: string, composePath?: string): Promise<WorkspaceComposeClearResult> {
+    const query = new URLSearchParams();
+    if (composePath) {
+      query.set('compose_path', composePath);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return this.request<WorkspaceComposeClearResult>(
+      `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/compose${suffix}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  runWorkspaceComposeAction(
+    workspaceId: string,
+    action: 'up' | 'down' | 'restart' | 'pull',
+    payload: WorkspaceComposeActionPayload,
+  ): Promise<TaskResponse> {
+    return this.request<TaskResponse>(
+      `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/compose/${action}`,
+      { method: 'POST', body: JSON.stringify(payload) },
+    );
+  }
+
+  syncWorkspace(workspaceId: string): Promise<TaskResponse> {
+    return this.request<TaskResponse>(`/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/sync`, {
+      method: 'POST',
+    });
   }
 
   buildFromWorkspace(workspaceId: string, payload: BuildFromWorkspacePayload): Promise<TaskResponse> {

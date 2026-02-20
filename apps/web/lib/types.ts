@@ -102,6 +102,7 @@ export interface WorkspaceInfo {
   workspace_id: string;
   dockerfiles: string[];
   directories: string[];
+  compose_files: string[];
 }
 
 export interface BuildFromWorkspacePayload {
@@ -116,6 +117,43 @@ export interface BuildFromWorkspacePayload {
 export interface LoadFromUrlPayload {
   url: string;
   auth_token?: string;
+}
+
+export type ComposeSource = 'repository' | 'custom';
+
+export interface WorkspaceComposeInfo {
+  workspace_id: string;
+  compose_files: string[];
+  selected_compose: string;
+  source: ComposeSource;
+  custom_exists: boolean;
+  project_name: string;
+  content: string;
+}
+
+export interface WorkspaceComposeUpdatePayload {
+  compose_path?: string;
+  content: string;
+}
+
+export interface WorkspaceComposeUpdateResult {
+  workspace_id: string;
+  compose_path: string;
+  custom_compose_path: string;
+}
+
+export interface WorkspaceComposeClearResult {
+  workspace_id: string;
+  compose_path: string;
+  deleted: boolean;
+}
+
+export interface WorkspaceComposeActionPayload {
+  compose_path?: string;
+  source?: ComposeSource;
+  project_name?: string;
+  force_recreate?: boolean;
+  confirm?: boolean;
 }
 
 export interface ProxyConfig {

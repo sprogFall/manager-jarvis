@@ -83,22 +83,34 @@ class StackService:
     def run_action(self, name: str, action: str, force_recreate: bool = False) -> dict[str, Any]:
         stack = self._resolve_stack(name)
         base_cmd = ["docker", "compose", "-f", str(stack.compose_file), "-p", name]
-
-        if action == "up":
-            cmd = base_cmd + ["up", "-d"]
-            if force_recreate:
-                cmd.append("--force-recreate")
-        elif action == "down":
-            cmd = base_cmd + ["down"]
-        elif action == "restart":
-            cmd = base_cmd + ["restart"]
-        elif action == "pull":
-            cmd = base_cmd + ["pull"]
-        else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported action {action}")
-
+        cmd = self._build_action_command(base_cmd, action, force_recreate)
         result = self._run_command(cmd)
         return {"stack": name, "action": action, **result}
+
+    def run_compose_action(
+        self,
+        *,
+        project_name: str,
+        compose_file: Path,
+        action: str,
+        force_recreate: bool = False,
+        project_directory: Path | None = None,
+    ) -> dict[str, Any]:
+        if not STACK_NAME_RE.match(project_name):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stack name")
+
+        compose_path = compose_file.resolve()
+        base_cmd = ["docker", "compose", "-f", str(compose_path), "-p", project_name]
+        if project_directory:
+            base_cmd.extend(["--project-directory", str(project_directory.resolve())])
+        cmd = self._build_action_command(base_cmd, action, force_recreate)
+        result = self._run_command(cmd)
+        return {
+            "stack": project_name,
+            "action": action,
+            "compose_file": str(compose_path),
+            **result,
+        }
 
     def stack_services(self, name: str) -> list[dict[str, Any]]:
         stack = self._resolve_stack(name)
@@ -247,3 +259,17 @@ class StackService:
                 detail={"message": "compose command failed", **result},
             )
         return result
+
+    def _build_action_command(self, base_cmd: list[str], action: str, force_recreate: bool) -> list[str]:
+        if action == "up":
+            cmd = base_cmd + ["up", "-d"]
+            if force_recreate:
+                cmd.append("--force-recreate")
+            return cmd
+        if action == "down":
+            return base_cmd + ["down"]
+        if action == "restart":
+            return base_cmd + ["restart"]
+        if action == "pull":
+            return base_cmd + ["pull"]
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported action {action}")

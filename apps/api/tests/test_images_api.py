@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from app.services.docker_service import DockerService
 
 

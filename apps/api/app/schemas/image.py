@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -50,6 +52,7 @@ class WorkspaceInfo(BaseModel):
     workspace_id: str
     dockerfiles: list[str]
     directories: list[str]
+    compose_files: list[str] = Field(default_factory=list)
 
 
 class BuildFromWorkspaceRequest(BaseModel):
@@ -64,3 +67,26 @@ class BuildFromWorkspaceRequest(BaseModel):
 class LoadFromUrlRequest(BaseModel):
     url: str = Field(min_length=1)
     auth_token: str | None = None  # Bearer token for private GitHub/Gitee release assets
+
+
+class WorkspaceComposeInfo(BaseModel):
+    workspace_id: str
+    compose_files: list[str]
+    selected_compose: str
+    source: Literal["repository", "custom"] = "repository"
+    custom_exists: bool = False
+    project_name: str
+    content: str
+
+
+class WorkspaceComposeUpdateRequest(BaseModel):
+    compose_path: str | None = None
+    content: str = Field(min_length=1)
+
+
+class WorkspaceComposeActionRequest(BaseModel):
+    compose_path: str | None = None
+    source: Literal["repository", "custom"] = "custom"
+    project_name: str | None = None
+    force_recreate: bool = False
+    confirm: bool = False

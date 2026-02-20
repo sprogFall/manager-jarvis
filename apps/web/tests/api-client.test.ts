@@ -92,6 +92,78 @@ describe('ApiClient', () => {
     );
   });
 
+  it('handles workspace compose workflow endpoints', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          workspace_id: 'ws-1',
+          compose_files: ['compose.yaml'],
+          selected_compose: 'compose.yaml',
+          source: 'repository',
+          custom_exists: false,
+          project_name: 'ws-demo',
+          content: 'services: {}',
+        }),
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          workspace_id: 'ws-1',
+          compose_path: 'compose.yaml',
+          custom_compose_path: '.jarvis/compose-overrides/1.yaml',
+        }),
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ task_id: 'task-compose-up' }),
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ task_id: 'task-sync' }),
+        text: async () => '',
+      });
+
+    const client = new ApiClient('http://localhost:8000', 'token-123');
+    await client.getWorkspaceCompose('ws-1', 'compose.yaml', 'custom');
+    await client.saveWorkspaceCompose('ws-1', { compose_path: 'compose.yaml', content: 'services:\n  web: {}' });
+    await client.runWorkspaceComposeAction('ws-1', 'up', { compose_path: 'compose.yaml', source: 'custom' });
+    await client.syncWorkspace('ws-1');
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8000/api/v1/images/git/workspace/ws-1/compose?source=custom&compose_path=compose.yaml',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:8000/api/v1/images/git/workspace/ws-1/compose',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ compose_path: 'compose.yaml', content: 'services:\n  web: {}' }),
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'http://localhost:8000/api/v1/images/git/workspace/ws-1/compose/up',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ compose_path: 'compose.yaml', source: 'custom' }),
+      }),
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      'http://localhost:8000/api/v1/images/git/workspace/ws-1/sync',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('throws response text on request failure', async () => {
     fetchMock.mockResolvedValue({
       ok: false,

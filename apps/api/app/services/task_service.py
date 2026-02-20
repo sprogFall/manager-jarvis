@@ -301,6 +301,28 @@ def task_load_image_from_url(params: dict[str, Any]) -> dict[str, Any]:
         temp_path.unlink(missing_ok=True)
 
 
+def task_workspace_compose_action(params: dict[str, Any]) -> dict[str, Any]:
+    service = StackService()
+    compose_file = Path(params["compose_file"])
+    project_directory = Path(params["project_directory"]) if params.get("project_directory") else None
+    return service.run_compose_action(
+        project_name=params["project_name"],
+        compose_file=compose_file,
+        action=params["action"],
+        force_recreate=params.get("force_recreate", False),
+        project_directory=project_directory,
+    )
+
+
+def task_git_sync(params: dict[str, Any]) -> dict[str, Any]:
+    from app.services.git_service import GitService
+    from app.services.proxy_service import get_runtime_proxy_url
+
+    service = GitService()
+    proxy_url = get_runtime_proxy_url()
+    return service.sync_workspace(params["workspace_id"], proxy_url=proxy_url)
+
+
 def register_default_handlers(task_manager: TaskManager) -> None:
     task_manager.register("image.pull", task_pull_image)
     task_manager.register("image.build", task_build_image)
@@ -312,3 +334,5 @@ def register_default_handlers(task_manager: TaskManager) -> None:
     task_manager.register("image.git.clone", task_git_clone)
     task_manager.register("image.git.build", task_build_from_workspace)
     task_manager.register("image.load.url", task_load_image_from_url)
+    task_manager.register("image.git.compose.action", task_workspace_compose_action)
+    task_manager.register("image.git.sync", task_git_sync)

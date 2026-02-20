@@ -165,7 +165,35 @@ const noClient = {
   pullImage: async () => ({ task_id: 'task-demo' }),
   deleteImage: async () => undefined,
   gitClone: async () => ({ task_id: 'task-demo' }),
-  getWorkspace: async () => ({ workspace_id: '', dockerfiles: [], directories: [] }),
+  getTask: async () => ({
+    id: 'task-demo',
+    task_type: 'image.git.clone',
+    status: 'queued',
+    resource_type: 'image',
+    resource_id: null,
+    params: null,
+    result: null,
+    error: null,
+    retry_of: null,
+    created_by: null,
+    created_at: null,
+    started_at: null,
+    finished_at: null,
+  }),
+  getWorkspace: async () => ({ workspace_id: '', dockerfiles: [], directories: [], compose_files: [] }),
+  getWorkspaceCompose: async () => ({
+    workspace_id: '',
+    compose_files: [],
+    selected_compose: 'compose.yaml',
+    source: 'repository' as const,
+    custom_exists: false,
+    project_name: 'ws-demo',
+    content: '',
+  }),
+  saveWorkspaceCompose: async () => ({ workspace_id: '', compose_path: 'compose.yaml', custom_compose_path: '' }),
+  clearWorkspaceCompose: async () => ({ workspace_id: '', compose_path: 'compose.yaml', deleted: false }),
+  runWorkspaceComposeAction: async () => ({ task_id: 'task-demo' }),
+  syncWorkspace: async () => ({ task_id: 'task-demo' }),
   buildFromWorkspace: async () => ({ task_id: 'task-demo' }),
   deleteWorkspace: async () => undefined,
   loadFromUrl: async () => ({ task_id: 'task-demo' }),
@@ -245,7 +273,13 @@ export function AppShell({ client, onLogout }: AppShellProps) {
           pullImage={(payload) => api.pullImage(payload)}
           deleteImage={(image) => api.deleteImage(image)}
           gitClone={(payload) => api.gitClone(payload)}
+          getTask={(taskId) => api.getTask(taskId)}
           getWorkspace={(id) => api.getWorkspace(id)}
+          getWorkspaceCompose={(id, composePath, source) => api.getWorkspaceCompose(id, composePath, source)}
+          saveWorkspaceCompose={(id, payload) => api.saveWorkspaceCompose(id, payload)}
+          clearWorkspaceCompose={(id, composePath) => api.clearWorkspaceCompose(id, composePath)}
+          runWorkspaceComposeAction={(id, action, payload) => api.runWorkspaceComposeAction(id, action, payload)}
+          syncWorkspace={(id) => api.syncWorkspace(id)}
           buildFromWorkspace={(id, payload) => api.buildFromWorkspace(id, payload)}
           deleteWorkspace={(id) => api.deleteWorkspace(id)}
           loadFromUrl={(payload) => api.loadFromUrl(payload)}
