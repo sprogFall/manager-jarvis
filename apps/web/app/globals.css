@@ -223,6 +223,10 @@ button:disabled, .btn:disabled {
   color: #1e40af;
 }
 
+.notice-inline {
+  margin: 0;
+}
+
 .loading-banner {
   display: flex;
   align-items: center;

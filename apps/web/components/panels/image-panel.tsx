@@ -66,6 +66,7 @@ export function ImagePanel({
 }: ImagePanelProps) {
   const [images, setImages] = useState<ImageSummary[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [gitNotice, setGitNotice] = useState<Notice | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [form, setForm] = useState({ image: '', tag: '' });
@@ -100,6 +101,12 @@ export function ImagePanel({
     setComposeContent('');
     setComposeProjectName('');
     setComposeCustomExists(false);
+  }
+
+  function pushGitNotice(tone: NoticeTone, text: string) {
+    const next = { tone, text };
+    setNotice(next);
+    setGitNotice(next);
   }
 
   async function submitPull(event: FormEvent<HTMLFormElement>) {
@@ -138,7 +145,7 @@ export function ImagePanel({
   async function submitClone(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!cloneForm.repo_url.trim()) {
-      setNotice({ tone: 'error', text: '请输入仓库地址' });
+      pushGitNotice('error', '请输入仓库地址');
       return;
     }
 
@@ -146,6 +153,7 @@ export function ImagePanel({
     setWorkspace(null);
     setCloneTaskId('');
     resetComposeState();
+    setGitNotice(null);
     try {
       const payload: GitClonePayload = {
         repo_url: cloneForm.repo_url.trim(),
@@ -154,9 +162,9 @@ export function ImagePanel({
       };
       const result = await gitClone(payload);
       setCloneTaskId(result.task_id);
-      setNotice({ tone: 'success', text: `克隆任务已创建：${result.task_id}，可直接点击“加载目录”自动识别工作区` });
+      pushGitNotice('success', `克隆任务已创建：${result.task_id}，可直接点击“加载目录”自动识别工作区`);
     } catch (error) {
-      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '克隆仓库失败' });
+      pushGitNotice('error', error instanceof Error ? error.message : '克隆仓库失败');
     } finally {
       setWorking(false);
     }
@@ -164,7 +172,7 @@ export function ImagePanel({
 
   async function loadWorkspace() {
     if (!cloneTaskId.trim()) {
-      setNotice({ tone: 'error', text: '请先克隆仓库或输入工作区 ID' });
+      pushGitNotice('error', '请先克隆仓库或输入工作区 ID');
       return;
     }
 
@@ -204,12 +212,9 @@ export function ImagePanel({
       if (info.compose_files.length > 0) {
         await loadWorkspaceCompose(info.workspace_id, undefined, 'repository');
       }
-      setNotice({
-        tone: 'success',
-        text: `已加载工作区：${info.workspace_id}（Compose 文件 ${info.compose_files.length} 个）`,
-      });
+      pushGitNotice('success', `已加载工作区：${info.workspace_id}（Compose 文件 ${info.compose_files.length} 个）`);
     } catch (error) {
-      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '加载工作区失败' });
+      pushGitNotice('error', error instanceof Error ? error.message : '加载工作区失败');
     } finally {
       setWorking(false);
     }
@@ -225,7 +230,7 @@ export function ImagePanel({
       setComposeProjectName(compose.project_name);
       setComposeCustomExists(compose.custom_exists);
     } catch (error) {
-      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '加载 Compose 失败' });
+      pushGitNotice('error', error instanceof Error ? error.message : '加载 Compose 失败');
     } finally {
       setComposeLoading(false);
     }
@@ -234,7 +239,7 @@ export function ImagePanel({
   async function saveCustomCompose() {
     if (!workspace || !composePath.trim()) return;
     if (!composeContent.trim()) {
-      setNotice({ tone: 'error', text: 'Compose 内容不能为空' });
+      pushGitNotice('error', 'Compose 内容不能为空');
       return;
     }
     setWorking(true);
@@ -244,9 +249,9 @@ export function ImagePanel({
         content: composeContent,
       });
       await loadWorkspaceCompose(workspace.workspace_id, composePath, 'custom');
-      setNotice({ tone: 'success', text: '已保存自定义 Compose，可用于后续更新和重启' });
+      pushGitNotice('success', '已保存自定义 Compose，可用于后续更新和重启');
     } catch (error) {
-      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '保存自定义 Compose 失败' });
+      pushGitNotice('error', error instanceof Error ? error.message : '保存自定义 Compose 失败');
     } finally {
       setWorking(false);
     }
@@ -258,9 +263,9 @@ export function ImagePanel({
     try {
       await clearWorkspaceCompose(workspace.workspace_id, composePath);
       await loadWorkspaceCompose(workspace.workspace_id, composePath, 'repository');
-      setNotice({ tone: 'success', text: '已切换回仓库 Compose，临时自定义已清理' });
+      pushGitNotice('success', '已切换回仓库 Compose，临时自定义已清理');
     } catch (error) {
-      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '清理自定义 Compose 失败' });
+      pushGitNotice('error', error instanceof Error ? error.message : '清理自定义 Compose 失败');
     } finally {
       setWorking(false);
     }
@@ -277,9 +282,9 @@ export function ImagePanel({
         force_recreate: false,
         confirm: false,
       });
-      setNotice({ tone: 'success', text: `Compose ${action} 任务已创建：${result.task_id}` });
+      pushGitNotice('success', `Compose ${action} 任务已创建：${result.task_id}`);
     } catch (error) {
-      setNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Compose 操作失败' });
+      pushGitNotice('error', error instanceof Error ? error.message : 'Compose 操作失败');
     } finally {
       setWorking(false);
     }
@@ -290,9 +295,9 @@ export function ImagePanel({
     setWorking(true);
     try {
       const result = await syncWorkspace(workspace.workspace_id);
-      setNotice({ tone: 'success', text: `代码同步任务已创建：${result.task_id}` });
+      pushGitNotice('success', `代码同步任务已创建：${result.task_id}`);
     } catch (error) {
-      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '同步仓库失败' });
+      pushGitNotice('error', error instanceof Error ? error.message : '同步仓库失败');
     } finally {
       setWorking(false);
     }
@@ -302,7 +307,7 @@ export function ImagePanel({
     event.preventDefault();
     if (!workspace) return;
     if (!buildForm.tag.trim()) {
-      setNotice({ tone: 'error', text: '请输入镜像 Tag' });
+      pushGitNotice('error', '请输入镜像 Tag');
       return;
     }
 
@@ -314,10 +319,10 @@ export function ImagePanel({
         context_path: buildForm.context_path.trim() || '.',
         cleanup_after: false,
       });
-      setNotice({ tone: 'success', text: `构建任务已创建：${result.task_id}` });
+      pushGitNotice('success', `构建任务已创建：${result.task_id}`);
       setBuildForm((prev) => ({ ...prev, tag: '' }));
     } catch (error) {
-      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '构建镜像失败' });
+      pushGitNotice('error', error instanceof Error ? error.message : '构建镜像失败');
     } finally {
       setWorking(false);
     }
@@ -332,9 +337,9 @@ export function ImagePanel({
       setWorkspace(null);
       setCloneTaskId('');
       resetComposeState();
-      setNotice({ tone: 'success', text: '工作区已清理' });
+      pushGitNotice('success', '工作区已清理');
     } catch (error) {
-      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '清理工作区失败' });
+      pushGitNotice('error', error instanceof Error ? error.message : '清理工作区失败');
     } finally {
       setWorking(false);
     }
@@ -452,6 +457,12 @@ export function ImagePanel({
               {working ? '处理中...' : '克隆仓库'}
             </button>
           </form>
+
+          {gitNotice ? (
+            <p className={`notice notice-${gitNotice.tone} notice-inline`} role={gitNotice.tone === 'error' ? 'alert' : undefined}>
+              {gitNotice.text}
+            </p>
+          ) : null}
 
           {cloneTaskId ? (
             <div className="workspace-loader">

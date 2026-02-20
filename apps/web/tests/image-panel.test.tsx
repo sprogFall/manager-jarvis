@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -280,5 +280,21 @@ describe('ImagePanel', () => {
     await waitFor(() => {
       expect(syncWorkspace).toHaveBeenCalledWith('ws-id-compose');
     });
+  });
+
+  it('shows workspace load error inside git section for mobile visibility', async () => {
+    const user = userEvent.setup();
+    const getWorkspace = vi.fn().mockRejectedValue(new Error('工作区不存在'));
+
+    render(<ImagePanel {...defaultProps} getWorkspace={getWorkspace} />);
+
+    await user.click(screen.getByText('从 Git 仓库构建镜像'));
+    await user.type(screen.getByLabelText('仓库地址'), 'https://github.com/user/repo.git');
+    await user.click(screen.getByRole('button', { name: '克隆仓库' }));
+    await user.click(screen.getByRole('button', { name: '加载目录' }));
+
+    const gitDetails = screen.getByText('从 Git 仓库构建镜像').closest('details');
+    expect(gitDetails).not.toBeNull();
+    expect(await within(gitDetails as HTMLElement).findByText('工作区不存在')).toBeInTheDocument();
   });
 });
