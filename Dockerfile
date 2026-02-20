@@ -21,6 +21,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker:27-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY apps/api /app
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \

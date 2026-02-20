@@ -332,6 +332,18 @@ class TestGitServiceUnit:
         assert captured['env']['HTTPS_PROXY'] == 'http://127.0.0.1:7890'
         service.cleanup(workspace_id)
 
+    def test_clone_raises_runtime_error_when_git_command_missing(self, monkeypatch):
+        import pytest as _pytest
+
+        def fake_run(*args, **kwargs):
+            raise FileNotFoundError(2, "No such file or directory", "git")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        service = GitService()
+        with _pytest.raises(RuntimeError, match="git command not found"):
+            service.clone(repo_url="https://github.com/user/repo.git")
+
     def test_list_workspace_excludes_git_dir(self, runtime_paths):
         ws_id = "9" * 32
         ws_path: Path = runtime_paths["workspaces"] / ws_id
@@ -344,3 +356,19 @@ class TestGitServiceUnit:
         info = service.list_workspace(ws_id)
         assert all(".git" not in df for df in info["dockerfiles"])
         assert "Dockerfile" in info["dockerfiles"]
+
+    def test_sync_workspace_raises_runtime_error_when_git_command_missing(self, runtime_paths, monkeypatch):
+        import pytest as _pytest
+
+        ws_id = "8" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+
+        def fake_run(*args, **kwargs):
+            raise FileNotFoundError(2, "No such file or directory", "git")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        service = GitService()
+        with _pytest.raises(RuntimeError, match="git command not found"):
+            service.sync_workspace(ws_id)

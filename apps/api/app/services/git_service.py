@@ -16,6 +16,7 @@ settings = get_settings()
 COMPOSE_FILE_SUFFIXES = {".yaml", ".yml"}
 IGNORED_WORKSPACE_DIRS = {".git", ".jarvis"}
 PROJECT_NAME_SAFE_RE = re.compile(r"[^a-z0-9_-]+")
+GIT_MISSING_MESSAGE = "git command not found in runtime image"
 
 
 class GitService:
@@ -41,6 +42,11 @@ class GitService:
         env = build_proxy_env(env, proxy_url)
         try:
             subprocess.run(cmd, check=True, capture_output=True, timeout=300, env=env)
+        except FileNotFoundError as exc:
+            shutil.rmtree(workspace_path, ignore_errors=True)
+            if exc.filename == "git":
+                raise RuntimeError(GIT_MISSING_MESSAGE) from exc
+            raise
         except subprocess.CalledProcessError as exc:
             shutil.rmtree(workspace_path, ignore_errors=True)
             stderr = exc.stderr.decode("utf-8", errors="replace")
@@ -190,27 +196,40 @@ class GitService:
                 timeout=300,
                 env=env,
             )
+        except FileNotFoundError as exc:
+            if exc.filename == "git":
+                raise RuntimeError(GIT_MISSING_MESSAGE) from exc
+            raise
         except subprocess.CalledProcessError as exc:
             raise RuntimeError(f"git pull failed: {exc.stderr.strip()}") from exc
         except subprocess.TimeoutExpired:
             raise RuntimeError("git pull timed out after 5 minutes") from None
 
-        branch_proc = subprocess.run(
-            ["git", "-C", str(workspace_path), "rev-parse", "--abbrev-ref", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            env=env,
-        )
-        commit_proc = subprocess.run(
-            ["git", "-C", str(workspace_path), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            env=env,
-        )
+        try:
+            branch_proc = subprocess.run(
+                ["git", "-C", str(workspace_path), "rev-parse", "--abbrev-ref", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env=env,
+            )
+            commit_proc = subprocess.run(
+                ["git", "-C", str(workspace_path), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env=env,
+            )
+        except FileNotFoundError as exc:
+            if exc.filename == "git":
+                raise RuntimeError(GIT_MISSING_MESSAGE) from exc
+            raise
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(f"git rev-parse failed: {exc.stderr.strip()}") from exc
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("git rev-parse timed out after 1 minute") from None
         return {
             "workspace_id": workspace_id,
             "branch": branch_proc.stdout.strip(),
