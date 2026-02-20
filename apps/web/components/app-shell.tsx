@@ -50,6 +50,99 @@ interface AppShellProps {
   onLogout?: () => void;
 }
 
+function IconContainer() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="14" height="14" rx="2" />
+      <path d="M3 8h14" />
+    </svg>
+  );
+}
+
+function IconImage() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="14" height="3" rx="1" />
+      <rect x="3" y="9" width="14" height="3" rx="1" />
+      <rect x="3" y="13" width="14" height="3" rx="1" />
+    </svg>
+  );
+}
+
+function IconStack() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 13l7 4 7-4" />
+      <path d="M3 9l7 4 7-4" />
+      <path d="M3 5l7 4 7-4-7-4z" />
+    </svg>
+  );
+}
+
+function IconTask() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="7" />
+      <path d="M10 6v4l3 2" />
+    </svg>
+  );
+}
+
+function IconAudit() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h8a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V5a2 2 0 012-2z" />
+      <path d="M7 7h6M7 10h6M7 13h3" />
+    </svg>
+  );
+}
+
+function IconProxy() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="7" />
+      <path d="M3 10h14" />
+      <ellipse cx="10" cy="10" rx="3" ry="7" />
+    </svg>
+  );
+}
+
+function IconLogout() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3H6a2 2 0 00-2 2v10a2 2 0 002 2h6" />
+      <path d="M10 10h7m0 0l-3-3m3 3l-3 3" />
+    </svg>
+  );
+}
+
+function IconMenu() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M4 6h12M4 10h12M4 14h12" />
+    </svg>
+  );
+}
+
+function IconMore() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="5" r="1.2" fill="currentColor" />
+      <circle cx="10" cy="10" r="1.2" fill="currentColor" />
+      <circle cx="10" cy="15" r="1.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+const SECTION_ICONS: Record<Section, () => React.JSX.Element> = {
+  containers: IconContainer,
+  images: IconImage,
+  stacks: IconStack,
+  tasks: IconTask,
+  audit: IconAudit,
+  proxy: IconProxy,
+};
+
 const noClient = {
   getContainers: async () => [],
   getContainerDetail: async () => ({
@@ -83,6 +176,9 @@ const noClient = {
   updateProxyConfig: async () => ({ proxy_url: null }),
 };
 
+const TAB_SECTIONS: Section[] = ['containers', 'images', 'stacks', 'tasks'];
+const MORE_SECTIONS: Section[] = ['audit', 'proxy'];
+
 export function AppShell({ client, onLogout }: AppShellProps) {
   const [section, setSection] = useState<Section>('containers');
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -96,7 +192,7 @@ export function AppShell({ client, onLogout }: AppShellProps) {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return;
     }
-    const media = window.matchMedia('(max-width: 960px)');
+    const media = window.matchMedia('(max-width: 768px)');
     const handleChange = (event: MediaQueryListEvent) => {
       if (!event.matches) {
         setMobileOpen(false);
@@ -169,6 +265,7 @@ export function AppShell({ client, onLogout }: AppShellProps) {
 
   const currentSection = SECTION_META[section];
   const sections = Object.keys(SECTION_META) as Section[];
+  const showInMore = MORE_SECTIONS.includes(section);
 
   return (
     <div className="shell">
@@ -183,10 +280,10 @@ export function AppShell({ client, onLogout }: AppShellProps) {
 
       <aside className={`sidebar ${mobileOpen ? 'open' : ''}`} aria-label="侧边导航">
         <div className="sidebar-mobile-head">
-          <p>快速导航</p>
+          <p>导航</p>
           <button
             type="button"
-            className="btn btn-ghost btn-sm sidebar-mobile-close"
+            className="btn btn-sm sidebar-mobile-close"
             aria-label="关闭侧边导航"
             onClick={closeMobileNav}
           >
@@ -205,25 +302,31 @@ export function AppShell({ client, onLogout }: AppShellProps) {
         </div>
 
         <nav>
-          {sections.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={`nav-item ${item === section ? 'active' : ''}`}
-              onClick={() => switchSection(item)}
-              aria-label={SECTION_META[item].label}
-              aria-current={item === section ? 'page' : undefined}
-            >
-              <span>{SECTION_META[item].label}</span>
-              <small>{SECTION_META[item].title}</small>
-            </button>
-          ))}
+          {sections.map((item) => {
+            const Icon = SECTION_ICONS[item];
+            return (
+              <button
+                key={item}
+                type="button"
+                className={`nav-item ${item === section ? 'active' : ''}`}
+                onClick={() => switchSection(item)}
+                aria-label={SECTION_META[item].label}
+                aria-current={item === section ? 'page' : undefined}
+              >
+                <span className="nav-icon"><Icon /></span>
+                <span>{SECTION_META[item].label}</span>
+              </button>
+            );
+          })}
         </nav>
 
         {onLogout ? (
-          <button type="button" className="btn btn-danger logout" onClick={onLogout}>
-            退出登录
-          </button>
+          <div className="logout">
+            <button type="button" className="logout-btn" onClick={onLogout}>
+              <span className="nav-icon"><IconLogout /></span>
+              <span>退出登录</span>
+            </button>
+          </div>
         ) : null}
       </aside>
 
@@ -232,14 +335,13 @@ export function AppShell({ client, onLogout }: AppShellProps) {
           <div className="topbar-main">
             <button
               type="button"
-              className="btn btn-ghost mobile-menu"
+              className="btn btn-ghost btn-sm mobile-menu"
               aria-label="打开导航"
               onClick={() => setMobileOpen((prev) => !prev)}
             >
-              菜单
+              <IconMenu />
             </button>
             <div>
-              <p className="topbar-kicker">{currentSection.label}</p>
               <h2>{currentSection.title}</h2>
               <p className="muted">{currentSection.description}</p>
             </div>
@@ -248,6 +350,33 @@ export function AppShell({ client, onLogout }: AppShellProps) {
         </header>
 
         <div className="content-body">{renderSection()}</div>
+
+        <nav className="bottom-tabs" aria-label="底部导航">
+          {TAB_SECTIONS.map((item) => {
+            const Icon = SECTION_ICONS[item];
+            return (
+              <button
+                key={item}
+                type="button"
+                className={`tab-item ${item === section ? 'active' : ''}`}
+                onClick={() => switchSection(item)}
+                aria-label={SECTION_META[item].label}
+              >
+                <span className="tab-icon"><Icon /></span>
+                {SECTION_META[item].label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            className={`tab-item ${showInMore ? 'active' : ''}`}
+            onClick={() => setMobileOpen(true)}
+            aria-label="更多选项"
+          >
+            <span className="tab-icon"><IconMore /></span>
+            更多
+          </button>
+        </nav>
       </main>
     </div>
   );

@@ -28,15 +28,28 @@ class StackService:
 
     def list_stacks(self) -> list[dict[str, Any]]:
         stacks: list[dict[str, Any]] = []
+        seen_names: set[str] = set()
         for stack in self._scan_stacks():
+            seen_names.add(stack.name)
             stacks.append(
                 {
                     "name": stack.name,
                     "path": str(stack.path),
                     "compose_file": str(stack.compose_file),
-                    "services": self.stack_services(stack.name),
+                    "services": self._get_services(stack),
                 }
             )
+        for project in self._discover_projects():
+            if project.name not in seen_names:
+                seen_names.add(project.name)
+                stacks.append(
+                    {
+                        "name": project.name,
+                        "path": str(project.path),
+                        "compose_file": str(project.compose_file),
+                        "services": self._get_services(project),
+                    }
+                )
         return stacks
 
     def get_stack(self, name: str) -> dict[str, Any]:
@@ -76,13 +89,16 @@ class StackService:
 
     def stack_services(self, name: str) -> list[dict[str, Any]]:
         stack = self._resolve_stack(name)
+        return self._get_services(stack)
+
+    def _get_services(self, stack: StackInfo) -> list[dict[str, Any]]:
         cmd = [
             "docker",
             "compose",
             "-f",
             str(stack.compose_file),
             "-p",
-            name,
+            stack.name,
             "ps",
             "--format",
             "json",
@@ -123,13 +139,16 @@ class StackService:
         if not STACK_NAME_RE.match(name):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stack name")
         path = settings.stacks_path / name
-        if not path.exists() or not path.is_dir():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stack not found")
+        if path.exists() and path.is_dir():
+            compose_file = self._pick_compose_file(path)
+            if compose_file:
+                return StackInfo(name=name, path=path, compose_file=compose_file)
 
-        compose_file = self._pick_compose_file(path)
-        if not compose_file:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Compose file not found")
-        return StackInfo(name=name, path=path, compose_file=compose_file)
+        for project in self._discover_projects():
+            if project.name == name:
+                return project
+
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stack not found")
 
     def _pick_compose_file(self, stack_dir: Path) -> Path | None:
         for name in ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"):
@@ -138,13 +157,42 @@ class StackService:
                 return candidate
         return None
 
-    def _run_command(self, cmd: list[str], raise_on_error: bool = True) -> dict[str, Any]:
+    def _discover_projects(self) -> list[StackInfo]:
+        result = self._run_command(
+            ["docker", "compose", "ls", "--format", "json"],
+            raise_on_error=False,
+            timeout=10,
+        )
+        if result["exit_code"] != 0 or not result["stdout"].strip():
+            return []
+        try:
+            projects = json.loads(result["stdout"])
+            if not isinstance(projects, list):
+                return []
+            infos: list[StackInfo] = []
+            for project in projects:
+                config_files = project.get("ConfigFiles", "")
+                first_file = config_files.split(",")[0].strip()
+                if first_file:
+                    compose_path = Path(first_file)
+                    infos.append(
+                        StackInfo(
+                            name=project["Name"],
+                            path=compose_path.parent,
+                            compose_file=compose_path,
+                        )
+                    )
+            return infos
+        except (json.JSONDecodeError, KeyError):
+            return []
+
+    def _run_command(self, cmd: list[str], raise_on_error: bool = True, timeout: int = 60 * 20) -> dict[str, Any]:
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             check=False,
-            timeout=60 * 20,
+            timeout=timeout,
         )
         result = {
             "exit_code": proc.returncode,

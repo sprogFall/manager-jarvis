@@ -1,13 +1,14 @@
 'use client';
 
-import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 import { AppShell } from '@/components/app-shell';
 import { ApiClient, apiBaseUrl } from '@/lib/api';
 import { clearSession, loadSession } from '@/lib/session';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [session, setSession] = useState(loadSession());
 
   const client = useMemo(() => {
@@ -17,23 +18,19 @@ export default function DashboardPage() {
     return new ApiClient(apiBaseUrl(), session.accessToken);
   }, [session.accessToken]);
 
+  useEffect(() => {
+    if (!session.accessToken) {
+      router.replace('/login');
+    }
+  }, [session.accessToken, router]);
+
   function handleLogout() {
     clearSession();
     setSession(loadSession());
   }
 
   if (!session.accessToken) {
-    return (
-      <main className="unauthorized">
-        <div className="unauthorized-card">
-          <h1>尚未登录</h1>
-          <p>请先进入登录页获取访问令牌，再使用 Docker 管理功能。</p>
-          <Link href="/login" className="btn btn-subtle unauthorized-link">
-            前往登录
-          </Link>
-        </div>
-      </main>
-    );
+    return null;
   }
 
   return (

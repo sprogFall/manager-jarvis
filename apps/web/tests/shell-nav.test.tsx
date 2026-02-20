@@ -34,7 +34,7 @@ function stubMatchMedia(initialMatches: boolean) {
   return {
     setMatches(next: boolean) {
       matches = next;
-      const event = { matches, media: '(max-width: 960px)' } as MediaQueryListEvent;
+      const event = { matches, media: '(max-width: 768px)' } as MediaQueryListEvent;
       listeners.forEach((listener) => listener(event));
     },
   };
@@ -54,11 +54,14 @@ describe('AppShell', () => {
 
     expect(screen.getAllByText('容器总览').length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole('button', { name: '镜像' }));
+    const sidebar = screen.getByLabelText('侧边导航');
+    const imageBtn = sidebar.querySelector('button[aria-label="镜像"]') as HTMLElement;
+    await user.click(imageBtn);
     expect(screen.getAllByText('镜像管理').length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('button', { name: '打开导航' }));
-    await user.click(screen.getByRole('button', { name: '任务' }));
+    const taskBtn = sidebar.querySelector('button[aria-label="任务"]') as HTMLElement;
+    await user.click(taskBtn);
     expect(screen.getAllByText('任务中心').length).toBeGreaterThan(0);
   });
 

@@ -1,7 +1,10 @@
+import json
+import subprocess
 from datetime import datetime, timezone
 
 from app.models.task import TaskRecord
 from app.services.stack_service import StackService
+import app.services.stack_service as stack_module
 
 
 class TestStacksAPI:
@@ -114,3 +117,59 @@ class TestStacksAPI:
         assert resp.status_code == 200
         task_id = resp.json()["task_id"]
         assert fake_task_manager.records[task_id].task_type == "stack.action"
+
+    def test_list_stacks_discovers_running_projects(self, client, monkeypatch):
+        """docker compose ls 发现的运行中项目应出现在栈列表中"""
+        ls_output = json.dumps([
+            {"Name": "web-app", "Status": "running(2)", "ConfigFiles": "/opt/web/compose.yaml"},
+        ])
+        ps_output = json.dumps([{"Service": "nginx", "State": "running"}])
+
+        def fake_run(cmd, **kwargs):
+            if "ls" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, stdout=ls_output, stderr="")
+            if "ps" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, stdout=ps_output, stderr="")
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+
+        monkeypatch.setattr(stack_module, "subprocess", type("M", (), {"run": staticmethod(fake_run)})())
+
+        resp = client.get("/api/v1/stacks")
+        assert resp.status_code == 200
+        names = [s["name"] for s in resp.json()]
+        assert "web-app" in names
+
+    def test_list_stacks_deduplicates_dir_and_discovered(self, client, runtime_paths, monkeypatch):
+        """STACKS_DIR 中已有的栈不会被 docker compose ls 重复列出"""
+        stack_dir = runtime_paths["stacks"] / "my-stack"
+        stack_dir.mkdir()
+        (stack_dir / "compose.yaml").write_text("services:\n  web:\n    image: nginx\n")
+
+        ls_output = json.dumps([
+            {"Name": "my-stack", "Status": "running(1)", "ConfigFiles": "/other/compose.yaml"},
+        ])
+
+        def fake_run(cmd, **kwargs):
+            if "ls" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, stdout=ls_output, stderr="")
+            if "ps" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+
+        monkeypatch.setattr(stack_module, "subprocess", type("M", (), {"run": staticmethod(fake_run)})())
+
+        resp = client.get("/api/v1/stacks")
+        assert resp.status_code == 200
+        names = [s["name"] for s in resp.json()]
+        assert names.count("my-stack") == 1
+
+    def test_discover_projects_handles_failure_gracefully(self, client, monkeypatch):
+        """docker compose ls 失败时不影响 STACKS_DIR 栈的返回"""
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="command not found")
+
+        monkeypatch.setattr(stack_module, "subprocess", type("M", (), {"run": staticmethod(fake_run)})())
+
+        resp = client.get("/api/v1/stacks")
+        assert resp.status_code == 200
+        assert resp.json() == []
