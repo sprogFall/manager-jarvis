@@ -30,17 +30,20 @@ class DockerService:
     def list_containers(self, all_containers: bool = True, include_stats: bool = True) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         for container in self.client.containers.list(all=all_containers):
-            container.reload()
             attrs = container.attrs
-            stats = self._container_stats(container) if include_stats and container.status == "running" else None
+            stats = None
+            if include_stats and container.status == "running":
+                container.reload()
+                attrs = container.attrs
+                stats = self._container_stats(container)
             items.append(
                 {
                     "id": container.id,
                     "name": container.name,
-                    "image": attrs.get("Config", {}).get("Image", ""),
+                    "image": attrs.get("Config", {}).get("Image") or attrs.get("Image", ""),
                     "status": attrs.get("State", {}).get("Status", "unknown"),
                     "state": attrs.get("Status", container.status or "unknown"),
-                    "ports": self._format_ports(attrs.get("NetworkSettings", {}).get("Ports", {})),
+                    "ports": self._format_ports(attrs.get("NetworkSettings", {}).get("Ports") or {}),
                     "stats": stats,
                 }
             )

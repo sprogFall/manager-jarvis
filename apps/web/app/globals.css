@@ -113,6 +113,8 @@ button:disabled,
 
 .mono {
   font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .muted {
@@ -619,6 +621,73 @@ tbody tr:hover {
   gap: 8px;
 }
 
+.cell-break {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.detail-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.94);
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.detail-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.detail-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-solid);
+}
+
+.detail-grid span {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.detail-grid strong {
+  font-weight: 600;
+}
+
+.detail-block {
+  display: grid;
+  gap: 6px;
+}
+
+.detail-block h4 {
+  font-size: 0.88rem;
+}
+
+.detail-pre {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #f6f8fa;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
 .stack-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -768,6 +837,10 @@ tbody tr:hover {
   .content {
     padding: 10px;
   }
+
+  .content-body {
+    overflow: visible;
+  }
 }
 
 @media (max-width: 720px) {
@@ -867,6 +940,8 @@ tbody tr:hover {
     grid-template-columns: 92px minmax(0, 1fr);
     gap: 10px;
     align-items: start;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   td:last-child {
@@ -899,6 +974,23 @@ tbody tr:hover {
 
   td .row-actions .btn {
     min-height: 40px;
+  }
+
+  .detail-panel {
+    padding: 10px;
+  }
+
+  .detail-panel-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .detail-panel-head .btn {
+    width: 100%;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
   }
 }
 

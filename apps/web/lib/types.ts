@@ -15,6 +15,20 @@ export interface ContainerSummary {
   stats: ContainerStats | null;
 }
 
+export interface ContainerDetail {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  state: string;
+  command: string;
+  created: string;
+  env: string[];
+  mounts: Array<Record<string, unknown>>;
+  networks: Record<string, unknown>;
+  ports: Record<string, unknown>;
+}
+
 export interface ImageSummary {
   id: string;
   tags: string[];

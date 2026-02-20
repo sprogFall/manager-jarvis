@@ -21,9 +21,39 @@ describe('ApiClient', () => {
     await client.getContainers();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://localhost:8000/api/v1/containers?include_stats=false');
     const headers = new Headers(options.headers);
     expect(headers.get('Authorization')).toBe('Bearer token-123');
+  });
+
+  it('requests container detail by id', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'c1',
+        name: 'web',
+        image: 'nginx:latest',
+        status: 'running',
+        state: 'running',
+        command: 'nginx -g "daemon off;"',
+        created: '2026-02-20T01:02:03Z',
+        env: ['A=1'],
+        mounts: [],
+        networks: {},
+        ports: {},
+      }),
+      text: async () => '',
+    });
+
+    const client = new ApiClient('http://localhost:8000', 'token-123');
+    const result = await client.getContainerDetail('c1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/containers/c1',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    expect(result.id).toBe('c1');
   });
 
 

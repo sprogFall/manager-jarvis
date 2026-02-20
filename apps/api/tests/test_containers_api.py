@@ -6,11 +6,44 @@ from app.services.docker_service import DockerService
 
 
 class TestContainersAPI:
-    def test_list_containers(self, client, monkeypatch):
+    def test_list_containers_default_without_stats(self, client, monkeypatch):
+        called: dict[str, bool] = {}
+
+        def fake_list_containers(self, all_containers=True, include_stats=False):
+            called["include_stats"] = include_stats
+            return [
+                {
+                    "id": "c1",
+                    "name": "web",
+                    "image": "nginx:latest",
+                    "status": "running",
+                    "state": "Up 3 minutes",
+                    "ports": ["0.0.0.0:8080->80/tcp"],
+                    "stats": None,
+                }
+            ]
+
         monkeypatch.setattr(
             DockerService,
             "list_containers",
-            lambda self, all_containers=True, include_stats=True: [
+            fake_list_containers,
+        )
+
+        resp = client.get("/api/v1/containers")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["id"] == "c1"
+        assert data[0]["name"] == "web"
+        assert data[0]["stats"] is None
+        assert called["include_stats"] is False
+
+    def test_list_containers_include_stats_when_query_enabled(self, client, monkeypatch):
+        called: dict[str, bool] = {}
+
+        def fake_list_containers(self, all_containers=True, include_stats=False):
+            called["include_stats"] = include_stats
+            return [
                 {
                     "id": "c1",
                     "name": "web",
@@ -25,15 +58,14 @@ class TestContainersAPI:
                         "memory_percent": 25.0,
                     },
                 }
-            ],
-        )
+            ]
 
-        resp = client.get("/api/v1/containers")
+        monkeypatch.setattr(DockerService, "list_containers", fake_list_containers)
+
+        resp = client.get("/api/v1/containers", params={"include_stats": True})
         assert resp.status_code == 200
-        data = resp.json()
-        assert len(data) == 1
-        assert data[0]["id"] == "c1"
-        assert data[0]["name"] == "web"
+        assert resp.json()[0]["stats"]["cpu_percent"] == 1.2
+        assert called["include_stats"] is True
 
     def test_get_container_detail(self, client, monkeypatch):
         monkeypatch.setattr(

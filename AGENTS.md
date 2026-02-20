@@ -92,6 +92,29 @@ cd deploy/compose
 docker compose up -d
 ```
 
+### Git SSH 推送（push）
+
+```bash
+# 1) 生成 SSH Key（已存在可跳过）
+ssh-keygen -t ed25519 -C "your_email@example.com"
+
+# 2) 启动 agent 并添加私钥
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+
+# 3) 复制公钥并添加到 GitHub/Gitee SSH Keys
+cat ~/.ssh/id_ed25519.pub
+
+# 4) 将远端改为 SSH 地址（按实际仓库替换）
+git remote set-url origin git@github.com:<owner>/<repo>.git
+
+# 5) 验证 SSH 连接
+ssh -T git@github.com
+
+# 6) 推送代码
+git push origin <branch>
+```
+
 ---
 
 ## 架构概览

@@ -30,7 +30,7 @@ settings = get_settings()
 @router.get("", response_model=list[ContainerSummary])
 def list_containers(
     all_containers: bool = True,
-    include_stats: bool = True,
+    include_stats: bool = False,
     _: User = Depends(get_current_admin),
 ) -> list[ContainerSummary]:
     service = DockerService()

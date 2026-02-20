@@ -1,6 +1,7 @@
 import type {
   AuditLogRecord,
   BuildFromWorkspacePayload,
+  ContainerDetail,
   ContainerSummary,
   GitClonePayload,
   ImageSummary,
@@ -73,7 +74,11 @@ export class ApiClient {
   }
 
   getContainers(): Promise<ContainerSummary[]> {
-    return this.request<ContainerSummary[]>('/api/v1/containers');
+    return this.request<ContainerSummary[]>('/api/v1/containers?include_stats=false');
+  }
+
+  getContainerDetail(containerId: string): Promise<ContainerDetail> {
+    return this.request<ContainerDetail>(`/api/v1/containers/${containerId}`);
   }
 
   actionContainer(containerId: string, action: 'start' | 'stop' | 'restart' | 'kill'): Promise<void> {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { AuditPanel } from '@/components/panels/audit-panel';
 import { ContainerPanel } from '@/components/panels/container-panel';
@@ -52,6 +52,19 @@ interface AppShellProps {
 
 const noClient = {
   getContainers: async () => [],
+  getContainerDetail: async () => ({
+    id: '',
+    name: '',
+    image: '',
+    status: 'unknown',
+    state: 'unknown',
+    command: '',
+    created: '',
+    env: [],
+    mounts: [],
+    networks: {},
+    ports: {},
+  }),
   actionContainer: async () => undefined,
   removeContainer: async () => undefined,
   getImages: async () => [],
@@ -75,6 +88,25 @@ export function AppShell({ client, onLogout }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const api = client ?? noClient;
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const media = window.matchMedia('(max-width: 960px)');
+    const handleChange = (event: MediaQueryListEvent) => {
+      if (!event.matches) {
+        setMobileOpen(false);
+      }
+    };
+    if (!media.matches) {
+      setMobileOpen(false);
+    }
+    media.addEventListener('change', handleChange);
+    return () => {
+      media.removeEventListener('change', handleChange);
+    };
+  }, []);
+
   function switchSection(next: Section) {
     setSection(next);
     setMobileOpen(false);
@@ -85,6 +117,7 @@ export function AppShell({ client, onLogout }: AppShellProps) {
       return (
         <ContainerPanel
           loadContainers={() => api.getContainers()}
+          loadContainerDetail={(id) => api.getContainerDetail(id)}
           actionContainer={(id, action) => api.actionContainer(id, action)}
           removeContainer={(id) => api.removeContainer(id)}
         />

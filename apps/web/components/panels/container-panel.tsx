@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-import { formatBytes } from '@/lib/format';
-import type { ContainerSummary } from '@/lib/types';
+import type { ContainerDetail, ContainerSummary } from '@/lib/types';
 
 interface ContainerPanelProps {
   loadContainers: () => Promise<ContainerSummary[]>;
+  loadContainerDetail: (containerId: string) => Promise<ContainerDetail>;
   actionContainer: (containerId: string, action: 'start' | 'stop' | 'restart' | 'kill') => Promise<void>;
   removeContainer: (containerId: string) => Promise<void>;
 }
@@ -20,11 +20,36 @@ interface Notice {
 
 const SKELETON_ROWS = 4;
 
-export function ContainerPanel({ loadContainers, actionContainer, removeContainer }: ContainerPanelProps) {
+function formatDetailText(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+  if (typeof value === 'string') {
+    return value.trim() || '-';
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '-';
+    return value
+      .map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
+      .join('\n');
+  }
+  if (typeof value === 'object') {
+    if (Object.keys(value as Record<string, unknown>).length === 0) {
+      return '-';
+    }
+    return JSON.stringify(value, null, 2);
+  }
+  return String(value);
+}
+
+export function ContainerPanel({ loadContainers, loadContainerDetail, actionContainer, removeContainer }: ContainerPanelProps) {
   const [containers, setContainers] = useState<ContainerSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
+  const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ContainerDetail | null>(null);
 
   const countText = useMemo(() => `共 ${containers.length} 个容器`, [containers.length]);
 
@@ -33,6 +58,10 @@ export function ContainerPanel({ loadContainers, actionContainer, removeContaine
     try {
       const next = await loadContainers();
       setContainers(next);
+      if (selectedDetailId && !next.some((item) => item.id === selectedDetailId)) {
+        setSelectedDetailId(null);
+        setDetail(null);
+      }
     } catch (error) {
       setNotice({ tone: 'error', text: error instanceof Error ? error.message : '容器列表加载失败' });
     } finally {
@@ -67,6 +96,27 @@ export function ContainerPanel({ loadContainers, actionContainer, removeContaine
       setNotice({ tone: 'error', text: error instanceof Error ? error.message : '删除失败' });
     } finally {
       setBusyAction(null);
+    }
+  }
+
+  async function runLoadDetail(containerId: string) {
+    if (selectedDetailId === containerId && detail) {
+      setSelectedDetailId(null);
+      setDetail(null);
+      return;
+    }
+
+    setDetailLoadingId(containerId);
+    setNotice({ tone: 'info', text: '正在加载容器详情...' });
+    try {
+      const next = await loadContainerDetail(containerId);
+      setSelectedDetailId(containerId);
+      setDetail(next);
+      setNotice(null);
+    } catch (error) {
+      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '容器详情加载失败' });
+    } finally {
+      setDetailLoadingId(null);
     }
   }
 
@@ -107,8 +157,7 @@ export function ContainerPanel({ loadContainers, actionContainer, removeContaine
               <th>名称</th>
               <th>镜像</th>
               <th>状态</th>
-              <th>CPU</th>
-              <th>内存</th>
+              <th>端口</th>
               <th>动作</th>
             </tr>
           </thead>
@@ -126,9 +175,6 @@ export function ContainerPanel({ loadContainers, actionContainer, removeContaine
                       <span className="skeleton-pill" />
                     </td>
                     <td>
-                      <span className="skeleton-line skeleton-short" />
-                    </td>
-                    <td>
                       <span className="skeleton-line" />
                     </td>
                     <td>
@@ -140,7 +186,7 @@ export function ContainerPanel({ loadContainers, actionContainer, removeContaine
 
             {!loading && containers.length === 0 ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={5}>
                   <div className="empty-state">暂无容器数据</div>
                 </td>
               </tr>
@@ -149,27 +195,35 @@ export function ContainerPanel({ loadContainers, actionContainer, removeContaine
             {!loading
               ? containers.map((item) => {
                   const rowBusy = Boolean(busyAction && busyAction.startsWith(`${item.id}:`));
+                  const detailBusy = detailLoadingId === item.id;
+                  const opened = selectedDetailId === item.id;
                   return (
                     <tr key={item.id}>
                       <td data-label="名称">
                         <div className="cell-main">{item.name}</div>
                         <div className="cell-sub mono">{item.id.slice(0, 12)}</div>
                       </td>
-                      <td data-label="镜像" className="mono">
+                      <td data-label="镜像" className="mono cell-break">
                         {item.image}
                       </td>
                       <td data-label="状态">
                         <span className={`status status-${item.status}`}>{item.status}</span>
                         <div className="cell-sub">{item.state}</div>
                       </td>
-                      <td data-label="CPU">{item.stats ? `${item.stats.cpu_percent.toFixed(1)}%` : '-'}</td>
-                      <td data-label="内存">
-                        {item.stats
-                          ? `${formatBytes(item.stats.memory_usage)} / ${formatBytes(item.stats.memory_limit)}`
-                          : '-'}
+                      <td data-label="端口" className="mono cell-break">
+                        {item.ports.length > 0 ? item.ports.join(', ') : '-'}
                       </td>
                       <td data-label="动作">
                         <div className="row-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={rowBusy || detailBusy}
+                            onClick={() => void runLoadDetail(item.id)}
+                            aria-label={`查看 ${item.name} 详情`}
+                          >
+                            {detailBusy ? '加载中...' : opened ? '收起详情' : '详情'}
+                          </button>
                           <button
                             type="button"
                             className="btn btn-subtle btn-sm"
@@ -224,6 +278,66 @@ export function ContainerPanel({ loadContainers, actionContainer, removeContaine
           </tbody>
         </table>
       </div>
+
+      {detail ? (
+        <section className="detail-panel" aria-live="polite">
+          <div className="detail-panel-head">
+            <div>
+              <h3>容器详情</h3>
+              <p className="muted">为保证列表速度，详情字段按需单独加载。</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setSelectedDetailId(null);
+                setDetail(null);
+              }}
+            >
+              关闭
+            </button>
+          </div>
+
+          <div className="detail-grid">
+            <div>
+              <span>名称</span>
+              <strong>{detail.name}</strong>
+            </div>
+            <div>
+              <span>镜像</span>
+              <strong className="mono">{detail.image}</strong>
+            </div>
+            <div>
+              <span>状态</span>
+              <strong>{detail.status}</strong>
+            </div>
+            <div>
+              <span>创建时间</span>
+              <strong>{detail.created || '-'}</strong>
+            </div>
+          </div>
+
+          <div className="detail-block">
+            <h4>启动命令</h4>
+            <pre className="detail-pre mono">{formatDetailText(detail.command)}</pre>
+          </div>
+
+          <div className="detail-block">
+            <h4>环境变量</h4>
+            <pre className="detail-pre mono">{formatDetailText(detail.env)}</pre>
+          </div>
+
+          <div className="detail-block">
+            <h4>端口映射</h4>
+            <pre className="detail-pre mono">{formatDetailText(detail.ports)}</pre>
+          </div>
+
+          <div className="detail-block">
+            <h4>网络配置</h4>
+            <pre className="detail-pre mono">{formatDetailText(detail.networks)}</pre>
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }
