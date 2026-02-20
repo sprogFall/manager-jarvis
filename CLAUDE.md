@@ -181,6 +181,44 @@ apps/web/
 
 ---
 
+## 前端约定
+
+### CSS 自定义属性体系
+
+全局样式使用 CSS 自定义属性（`--color-*`, `--spacing-*`, `--radius-*` 等），深色主题为默认。所有颜色、间距、圆角均通过变量引用，禁止硬编码。
+
+### 组件结构模式
+
+每个面板组件遵循统一结构：
+```
+panel → panel-head → loading-banner → notice → content（table-wrap / form-grid / detail-panel）
+```
+
+### SVG 图标系统
+
+图标以内联 SVG 函数组件形式定义在 `app-shell.tsx` 中（`IconContainer`, `IconImage` 等），统一 20×20 viewBox，`stroke="currentColor"`。
+
+### 移动端底部 Tab 栏
+
+`TAB_SECTIONS`（containers/images/stacks/tasks）显示为底部标签页；`MORE_SECTIONS`（audit/proxy）通过"更多"抽屉访问。
+
+### 状态徽标
+
+CSS 类名使用英文原始值（`status-running`, `status-exited`），显示文本使用 `formatStatus()` 转换为中文。
+
+### 格式化工具函数（lib/format.ts）
+
+| 函数 | 用途 |
+|------|------|
+| `formatBytes(n)` | 字节数 → 可读大小（B/KB/MB/GB/TB） |
+| `formatTime(s)` | ISO 时间 → `zh-CN` 本地化时间 |
+| `formatStatus(s)` | 状态英文 → 中文（running→运行中, exited→已退出 等） |
+| `formatTaskType(s)` | 任务类型 → 中文（image.pull→镜像拉取 等） |
+| `formatAction(s)` | 审计动作 → 中文（container.start→启动容器 等） |
+| `formatPorts(s)` | 端口映射 → 友好格式（`0.0.0.0:8080->80/tcp` → `宿主机 8080 → 容器 80/tcp`） |
+
+---
+
 ## 配置项（环境变量）
 
 | 变量 | 默认值 | 说明 |

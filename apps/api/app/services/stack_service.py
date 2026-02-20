@@ -54,7 +54,13 @@ class StackService:
 
     def get_stack(self, name: str) -> dict[str, Any]:
         stack = self._resolve_stack(name)
-        content = stack.compose_file.read_text(encoding="utf-8")
+        try:
+            content = stack.compose_file.read_text(encoding="utf-8")
+        except (FileNotFoundError, OSError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Compose file not readable: {exc}",
+            ) from exc
         return {
             "name": stack.name,
             "compose_file": str(stack.compose_file),
@@ -187,13 +193,28 @@ class StackService:
             return []
 
     def _run_command(self, cmd: list[str], raise_on_error: bool = True, timeout: int = 60 * 20) -> dict[str, Any]:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=timeout,
-        )
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+            result = {
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": str(exc),
+                "command": " ".join(cmd),
+            }
+            if raise_on_error:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={"message": "compose command failed", **result},
+                ) from exc
+            return result
+
         result = {
             "exit_code": proc.returncode,
             "stdout": proc.stdout,

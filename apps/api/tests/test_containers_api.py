@@ -83,12 +83,45 @@ class TestContainersAPI:
                 "mounts": [],
                 "networks": {},
                 "ports": {},
+                "stats": {
+                    "cpu_percent": 3.5,
+                    "memory_usage": 2048,
+                    "memory_limit": 8192,
+                    "memory_percent": 25.0,
+                },
             },
         )
 
         resp = client.get("/api/v1/containers/c2")
         assert resp.status_code == 200
-        assert resp.json()["id"] == "c2"
+        body = resp.json()
+        assert body["id"] == "c2"
+        assert body["stats"]["cpu_percent"] == 3.5
+        assert body["stats"]["memory_usage"] == 2048
+
+    def test_get_container_detail_stopped_no_stats(self, client, monkeypatch):
+        monkeypatch.setattr(
+            DockerService,
+            "get_container_detail",
+            lambda self, container_id: {
+                "id": container_id,
+                "name": "worker",
+                "image": "python:3.11",
+                "status": "Exited",
+                "state": "exited",
+                "command": "python app.py",
+                "created": datetime.now(timezone.utc).isoformat(),
+                "env": [],
+                "mounts": [],
+                "networks": {},
+                "ports": {},
+                "stats": None,
+            },
+        )
+
+        resp = client.get("/api/v1/containers/c3")
+        assert resp.status_code == 200
+        assert resp.json()["stats"] is None
 
     def test_create_container_and_audit(self, client, db_session, monkeypatch):
         monkeypatch.setattr(DockerService, "create_container", lambda self, payload: "new-container-id")

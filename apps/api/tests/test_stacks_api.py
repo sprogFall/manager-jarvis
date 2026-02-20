@@ -7,6 +7,15 @@ from app.services.stack_service import StackService
 import app.services.stack_service as stack_module
 
 
+def _make_subprocess_mock(fake_run):
+    """创建包含 run/TimeoutExpired/CompletedProcess 的 subprocess 替身"""
+    return type("M", (), {
+        "run": staticmethod(fake_run),
+        "TimeoutExpired": subprocess.TimeoutExpired,
+        "CompletedProcess": subprocess.CompletedProcess,
+    })()
+
+
 class TestStacksAPI:
     def test_list_stacks(self, client, monkeypatch):
         monkeypatch.setattr(
@@ -132,7 +141,7 @@ class TestStacksAPI:
                 return subprocess.CompletedProcess(cmd, 0, stdout=ps_output, stderr="")
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
 
-        monkeypatch.setattr(stack_module, "subprocess", type("M", (), {"run": staticmethod(fake_run)})())
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
 
         resp = client.get("/api/v1/stacks")
         assert resp.status_code == 200
@@ -156,7 +165,7 @@ class TestStacksAPI:
                 return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
 
-        monkeypatch.setattr(stack_module, "subprocess", type("M", (), {"run": staticmethod(fake_run)})())
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
 
         resp = client.get("/api/v1/stacks")
         assert resp.status_code == 200
@@ -168,8 +177,47 @@ class TestStacksAPI:
         def fake_run(cmd, **kwargs):
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="command not found")
 
-        monkeypatch.setattr(stack_module, "subprocess", type("M", (), {"run": staticmethod(fake_run)})())
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
 
         resp = client.get("/api/v1/stacks")
         assert resp.status_code == 200
         assert resp.json() == []
+
+    def test_list_stacks_subprocess_file_not_found(self, client, monkeypatch):
+        """subprocess.run 抛出 FileNotFoundError 时返回 200 空列表"""
+        def fake_run(cmd, **kwargs):
+            raise FileNotFoundError("docker not found")
+
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
+
+        resp = client.get("/api/v1/stacks")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_list_stacks_subprocess_timeout(self, client, monkeypatch):
+        """subprocess.run 抛出 TimeoutExpired 时返回 200 空列表"""
+        def fake_run(cmd, **kwargs):
+            raise subprocess.TimeoutExpired(cmd, 10)
+
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
+
+        resp = client.get("/api/v1/stacks")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_get_stack_compose_file_not_found(self, client, monkeypatch):
+        """compose 文件不存在时 get_stack 返回 404"""
+        from pathlib import Path
+
+        monkeypatch.setattr(
+            StackService,
+            "_resolve_stack",
+            lambda self, name: stack_module.StackInfo(
+                name=name,
+                path=Path("/tmp/nonexist"),
+                compose_file=Path("/tmp/nonexist/compose.yaml"),
+            ),
+        )
+
+        resp = client.get("/api/v1/stacks/demo")
+        assert resp.status_code == 404

@@ -27,6 +27,7 @@ export interface ContainerDetail {
   mounts: Array<Record<string, unknown>>;
   networks: Record<string, unknown>;
   ports: Record<string, unknown>;
+  stats: ContainerStats | null;
 }
 
 export interface ImageSummary {

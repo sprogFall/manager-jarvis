@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { formatTime } from '@/lib/format';
+import { formatAction, formatStatus, formatTime } from '@/lib/format';
 import type { AuditLogRecord } from '@/lib/types';
 
 interface AuditPanelProps {
@@ -107,10 +107,10 @@ export function AuditPanel({ loadAuditLogs }: AuditPanelProps) {
                   <tr key={record.id}>
                     <td data-label="时间">{formatTime(record.created_at)}</td>
                     <td data-label="用户">{record.username ?? '-'}</td>
-                    <td data-label="动作">{record.action}</td>
+                    <td data-label="动作">{formatAction(record.action)}</td>
                     <td data-label="资源">{record.resource_id ?? '-'}</td>
                     <td data-label="状态">
-                      <span className={`status status-${record.status}`}>{record.status}</span>
+                      <span className={`status status-${record.status}`}>{formatStatus(record.status)}</span>
                     </td>
                   </tr>
                 ))

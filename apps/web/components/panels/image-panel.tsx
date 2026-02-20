@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 
-import { formatBytes } from '@/lib/format';
+import { formatBytes, formatTime } from '@/lib/format';
 import type {
   BuildFromWorkspacePayload,
   GitClonePayload,
@@ -410,6 +410,7 @@ export function ImagePanel({
               <th>Tag</th>
               <th>镜像 ID</th>
               <th>体积</th>
+              <th>创建时间</th>
               <th>动作</th>
             </tr>
           </thead>
@@ -429,13 +430,16 @@ export function ImagePanel({
                     <td>
                       <span className="skeleton-line skeleton-short" />
                     </td>
+                    <td>
+                      <span className="skeleton-line skeleton-short" />
+                    </td>
                   </tr>
                 ))
               : null}
 
             {!loading && images.length === 0 ? (
               <tr>
-                <td colSpan={4}>
+                <td colSpan={5}>
                   <div className="empty-state">暂无镜像数据</div>
                 </td>
               </tr>
@@ -444,11 +448,12 @@ export function ImagePanel({
             {!loading
               ? images.map((item) => (
                   <tr key={item.id}>
-                    <td data-label="Tag">{item.tags.join(', ') || '<none>'}</td>
+                    <td data-label="Tag">{item.tags.join(', ') || '无标签'}</td>
                     <td data-label="镜像 ID" className="mono">
                       {item.id.slice(0, 18)}
                     </td>
                     <td data-label="体积">{formatBytes(item.size)}</td>
+                    <td data-label="创建时间">{formatTime(item.created)}</td>
                     <td data-label="动作">
                       <button
                         type="button"

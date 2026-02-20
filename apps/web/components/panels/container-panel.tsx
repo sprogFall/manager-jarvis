@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import { formatBytes, formatPorts, formatStatus, formatTime } from '@/lib/format';
 import type { ContainerDetail, ContainerSummary } from '@/lib/types';
 
 interface ContainerPanelProps {
@@ -20,23 +21,45 @@ interface Notice {
 
 const SKELETON_ROWS = 4;
 
+function formatDetailPorts(ports: Record<string, unknown>): string {
+  const entries = Object.entries(ports);
+  if (entries.length === 0) return '-';
+  const lines: string[] = [];
+  for (const [containerPort, bindings] of entries) {
+    if (!Array.isArray(bindings) || bindings.length === 0) {
+      lines.push(containerPort);
+      continue;
+    }
+    for (const bind of bindings) {
+      const hostPort = (bind as Record<string, string>).HostPort ?? '';
+      lines.push(`宿主机 ${hostPort} → 容器 ${containerPort}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function formatDetailMounts(mounts: Array<Record<string, unknown>>): string {
+  if (mounts.length === 0) return '-';
+  return mounts.map((m) => `${m.Source ?? '-'} → ${m.Destination ?? '-'}`).join('\n');
+}
+
+function formatDetailNetworks(networks: Record<string, unknown>): string {
+  const entries = Object.entries(networks);
+  if (entries.length === 0) return '-';
+  return entries
+    .map(([name, cfg]) => `${name}: ${(cfg as Record<string, string>)?.IPAddress ?? '-'}`)
+    .join('\n');
+}
+
 function formatDetailText(value: unknown): string {
-  if (value === null || value === undefined) {
-    return '-';
-  }
-  if (typeof value === 'string') {
-    return value.trim() || '-';
-  }
+  if (value === null || value === undefined) return '-';
+  if (typeof value === 'string') return value.trim() || '-';
   if (Array.isArray(value)) {
     if (value.length === 0) return '-';
-    return value
-      .map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
-      .join('\n');
+    return value.map((item) => (typeof item === 'string' ? item : JSON.stringify(item))).join('\n');
   }
   if (typeof value === 'object') {
-    if (Object.keys(value as Record<string, unknown>).length === 0) {
-      return '-';
-    }
+    if (Object.keys(value as Record<string, unknown>).length === 0) return '-';
     return JSON.stringify(value, null, 2);
   }
   return String(value);
@@ -207,11 +230,16 @@ export function ContainerPanel({ loadContainers, loadContainerDetail, actionCont
                         {item.image}
                       </td>
                       <td data-label="状态">
-                        <span className={`status status-${item.status}`}>{item.status}</span>
+                        <span className={`status status-${item.status}`}>{formatStatus(item.status)}</span>
                         <div className="cell-sub">{item.state}</div>
+                        {item.stats ? (
+                          <div className="cell-sub">
+                            CPU {item.stats.cpu_percent.toFixed(1)}% | 内存 {formatBytes(item.stats.memory_usage)}
+                          </div>
+                        ) : null}
                       </td>
                       <td data-label="端口" className="mono cell-break">
-                        {item.ports.length > 0 ? item.ports.join(', ') : '-'}
+                        {item.ports.length > 0 ? item.ports.map(formatPorts).join(', ') : '-'}
                       </td>
                       <td data-label="动作">
                         <div className="row-actions">
@@ -258,7 +286,7 @@ export function ContainerPanel({ loadContainers, loadContainerDetail, actionCont
                             onClick={() => void runAction(item.id, 'kill')}
                             aria-label={`强制终止 ${item.name}`}
                           >
-                            Kill
+                            强杀
                           </button>
                           <button
                             type="button"
@@ -309,13 +337,30 @@ export function ContainerPanel({ loadContainers, loadContainerDetail, actionCont
             </div>
             <div>
               <span>状态</span>
-              <strong>{detail.status}</strong>
+              <strong>{formatStatus(detail.state)}</strong>
             </div>
             <div>
               <span>创建时间</span>
-              <strong>{detail.created || '-'}</strong>
+              <strong>{formatTime(detail.created)}</strong>
             </div>
           </div>
+
+          {detail.stats ? (
+            <div className="detail-grid">
+              <div>
+                <span>CPU</span>
+                <strong>{detail.stats.cpu_percent.toFixed(1)}%</strong>
+              </div>
+              <div>
+                <span>内存使用</span>
+                <strong>{formatBytes(detail.stats.memory_usage)} / {formatBytes(detail.stats.memory_limit)}</strong>
+              </div>
+              <div>
+                <span>内存占比</span>
+                <strong>{detail.stats.memory_percent.toFixed(1)}%</strong>
+              </div>
+            </div>
+          ) : null}
 
           <div className="detail-block">
             <h4>启动命令</h4>
@@ -329,12 +374,17 @@ export function ContainerPanel({ loadContainers, loadContainerDetail, actionCont
 
           <div className="detail-block">
             <h4>端口映射</h4>
-            <pre className="detail-pre mono">{formatDetailText(detail.ports)}</pre>
+            <pre className="detail-pre mono">{formatDetailPorts(detail.ports)}</pre>
+          </div>
+
+          <div className="detail-block">
+            <h4>挂载</h4>
+            <pre className="detail-pre mono">{formatDetailMounts(detail.mounts)}</pre>
           </div>
 
           <div className="detail-block">
             <h4>网络配置</h4>
-            <pre className="detail-pre mono">{formatDetailText(detail.networks)}</pre>
+            <pre className="detail-pre mono">{formatDetailNetworks(detail.networks)}</pre>
           </div>
         </section>
       ) : null}

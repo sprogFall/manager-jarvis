@@ -56,18 +56,23 @@ class DockerService:
         command = attrs.get("Config", {}).get("Cmd") or ""
         if isinstance(command, list):
             command = " ".join(command)
+        state = attrs.get("State", {}).get("Status", "unknown")
+        stats = None
+        if state == "running":
+            stats = self._container_stats(container)
         return {
             "id": container.id,
             "name": container.name,
             "image": attrs.get("Config", {}).get("Image", ""),
             "status": attrs.get("Status", container.status),
-            "state": attrs.get("State", {}).get("Status", "unknown"),
+            "state": state,
             "command": command,
             "created": attrs.get("Created", ""),
             "env": attrs.get("Config", {}).get("Env") or [],
             "mounts": attrs.get("Mounts") or [],
             "networks": attrs.get("NetworkSettings", {}).get("Networks") or {},
             "ports": attrs.get("NetworkSettings", {}).get("Ports") or {},
+            "stats": stats,
         }
 
     def container_action(self, container_id: str, action: str) -> None:

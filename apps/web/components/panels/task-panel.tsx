@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { formatTime } from '@/lib/format';
+import { formatStatus, formatTaskType, formatTime } from '@/lib/format';
 import type { TaskRecord } from '@/lib/types';
 
 interface TaskPanelProps {
@@ -108,9 +108,9 @@ export function TaskPanel({ loadTasks }: TaskPanelProps) {
                     <td data-label="ID" className="mono">
                       {task.id}
                     </td>
-                    <td data-label="类型">{task.task_type}</td>
+                    <td data-label="类型">{formatTaskType(task.task_type)}</td>
                     <td data-label="状态">
-                      <span className={`status status-${task.status}`}>{task.status}</span>
+                      <span className={`status status-${task.status}`}>{formatStatus(task.status)}</span>
                     </td>
                     <td data-label="资源">{task.resource_id ?? '-'}</td>
                     <td data-label="创建时间">{formatTime(task.created_at)}</td>

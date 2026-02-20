@@ -30,6 +30,7 @@ const detail: ContainerDetail = {
   mounts: [{ Source: '/host/data', Destination: '/data' }],
   networks: { bridge: { IPAddress: '172.17.0.2' } },
   ports: { '80/tcp': [{ HostIp: '0.0.0.0', HostPort: '8080' }] },
+  stats: null,
 };
 
 describe('ContainerPanel', () => {
@@ -78,6 +79,20 @@ describe('ContainerPanel', () => {
     await waitFor(() => {
       expect(actionContainer).toHaveBeenCalledWith('c1', 'restart');
     });
+  });
+
+  it('displays Chinese status and friendly port format', async () => {
+    render(
+      <ContainerPanel
+        loadContainers={vi.fn().mockResolvedValue(containers)}
+        loadContainerDetail={vi.fn().mockResolvedValue(detail)}
+        actionContainer={vi.fn().mockResolvedValue(undefined)}
+        removeContainer={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(await screen.findByText('运行中')).toBeInTheDocument();
+    expect(screen.getByText('宿主机 8080 → 容器 80/tcp')).toBeInTheDocument();
   });
 
   it('loads detail on demand', async () => {

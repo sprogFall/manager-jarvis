@@ -30,6 +30,7 @@ class ContainerDetail(BaseModel):
     mounts: list[dict]
     networks: dict
     ports: dict
+    stats: ContainerStats | None = None
 
 
 class ContainerActionResponse(BaseModel):

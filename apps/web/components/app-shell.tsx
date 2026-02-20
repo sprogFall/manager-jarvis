@@ -157,6 +157,7 @@ const noClient = {
     mounts: [],
     networks: {},
     ports: {},
+    stats: null,
   }),
   actionContainer: async () => undefined,
   removeContainer: async () => undefined,

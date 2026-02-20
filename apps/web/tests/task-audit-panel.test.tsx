@@ -30,7 +30,8 @@ describe('TaskPanel', () => {
     );
 
     expect(await screen.findByText('task-1')).toBeInTheDocument();
-    expect(screen.getByText('running')).toBeInTheDocument();
+    expect(screen.getByText('运行中')).toBeInTheDocument();
+    expect(screen.getByText('镜像拉取')).toBeInTheDocument();
   });
 });
 
@@ -54,7 +55,8 @@ describe('AuditPanel', () => {
       />,
     );
 
-    expect(await screen.findByText('container.restart')).toBeInTheDocument();
+    expect(await screen.findByText('重启容器')).toBeInTheDocument();
     expect(screen.getByText('admin')).toBeInTheDocument();
+    expect(screen.getByText('成功')).toBeInTheDocument();
   });
 });
