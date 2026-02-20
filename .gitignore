@@ -10,6 +10,7 @@ __pycache__/
 node_modules/
 .next/
 dist/
+out/
 coverage/
 apps/api/tests/.runtime/
 .gh-helper-cache/
