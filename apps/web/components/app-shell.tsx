@@ -88,6 +88,10 @@ export function AppShell({ client, onLogout }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const api = client ?? noClient;
 
+  function closeMobileNav() {
+    setMobileOpen(false);
+  }
+
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
       return;
@@ -107,9 +111,23 @@ export function AppShell({ client, onLogout }: AppShellProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (mobileOpen) {
+      document.body.classList.add('mobile-nav-open');
+    } else {
+      document.body.classList.remove('mobile-nav-open');
+    }
+    return () => {
+      document.body.classList.remove('mobile-nav-open');
+    };
+  }, [mobileOpen]);
+
   function switchSection(next: Section) {
     setSection(next);
-    setMobileOpen(false);
+    closeMobileNav();
   }
 
   function renderSection() {
@@ -158,12 +176,24 @@ export function AppShell({ client, onLogout }: AppShellProps) {
         <button
           type="button"
           className="sidebar-backdrop"
-          aria-label="关闭导航"
-          onClick={() => setMobileOpen(false)}
+          aria-label="点击遮罩关闭导航"
+          onClick={closeMobileNav}
         />
       ) : null}
 
       <aside className={`sidebar ${mobileOpen ? 'open' : ''}`} aria-label="侧边导航">
+        <div className="sidebar-mobile-head">
+          <p>快速导航</p>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm sidebar-mobile-close"
+            aria-label="关闭侧边导航"
+            onClick={closeMobileNav}
+          >
+            关闭
+          </button>
+        </div>
+
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">
             MJ

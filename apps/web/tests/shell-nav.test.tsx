@@ -42,6 +42,7 @@ function stubMatchMedia(initialMatches: boolean) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  document.body.classList.remove('mobile-nav-open');
 });
 
 describe('AppShell', () => {
@@ -74,6 +75,22 @@ describe('AppShell', () => {
     media.setMatches(false);
     await waitFor(() => {
       expect(sidebar.className).not.toContain('open');
+      expect(document.body.classList.contains('mobile-nav-open')).toBe(false);
+    });
+  });
+
+  it('locks page scroll when mobile sidebar opens and unlocks after close', async () => {
+    stubMatchMedia(true);
+    const user = userEvent.setup();
+
+    render(<AppShell />);
+
+    await user.click(screen.getByRole('button', { name: '打开导航' }));
+    expect(document.body.classList.contains('mobile-nav-open')).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: '关闭侧边导航' }));
+    await waitFor(() => {
+      expect(document.body.classList.contains('mobile-nav-open')).toBe(false);
     });
   });
 });
