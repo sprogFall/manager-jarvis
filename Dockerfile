@@ -23,9 +23,8 @@ COPY --from=docker:27-cli /usr/local/libexec/docker/cli-plugins/docker-compose /
 
 WORKDIR /app
 COPY apps/api /app
-RUN python -m ensurepip --upgrade \
-    && pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir .
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && python -m pip install --no-cache-dir .
 
 COPY --from=web-builder /web/out /app/web-dist
 
