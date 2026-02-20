@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from fastapi import HTTPException, status
 
 from app.core.config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 STACK_NAME_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
 
@@ -29,7 +31,9 @@ class StackService:
     def list_stacks(self) -> list[dict[str, Any]]:
         stacks: list[dict[str, Any]] = []
         seen_names: set[str] = set()
-        for stack in self._scan_stacks():
+        scanned = self._scan_stacks()
+        logger.info("stacks_path=%s, scanned=%d stacks", settings.stacks_path, len(scanned))
+        for stack in scanned:
             seen_names.add(stack.name)
             stacks.append(
                 {
@@ -39,7 +43,9 @@ class StackService:
                     "services": self._get_services(stack),
                 }
             )
-        for project in self._discover_projects():
+        discovered = self._discover_projects()
+        logger.info("discovered=%d running projects", len(discovered))
+        for project in discovered:
             if project.name not in seen_names:
                 seen_names.add(project.name)
                 stacks.append(
@@ -50,6 +56,7 @@ class StackService:
                         "services": self._get_services(project),
                     }
                 )
+        logger.info("total stacks returned=%d", len(stacks))
         return stacks
 
     def get_stack(self, name: str) -> dict[str, Any]:
@@ -133,7 +140,13 @@ class StackService:
 
     def _scan_stacks(self) -> list[StackInfo]:
         stacks: list[StackInfo] = []
-        for child in settings.stacks_path.iterdir():
+        try:
+            children = list(settings.stacks_path.iterdir())
+        except OSError as exc:
+            logger.warning("cannot iterate stacks_path %s: %s", settings.stacks_path, exc)
+            return []
+        logger.info("scanning %s, found %d entries", settings.stacks_path, len(children))
+        for child in children:
             if not child.is_dir():
                 continue
             compose_file = self._pick_compose_file(child)
@@ -170,6 +183,11 @@ class StackService:
             timeout=10,
         )
         if result["exit_code"] != 0 or not result["stdout"].strip():
+            logger.warning(
+                "docker compose ls failed: exit_code=%s stderr=%s",
+                result["exit_code"],
+                result.get("stderr", "")[:200],
+            )
             return []
         try:
             projects = json.loads(result["stdout"])
@@ -193,6 +211,7 @@ class StackService:
             return []
 
     def _run_command(self, cmd: list[str], raise_on_error: bool = True, timeout: int = 60 * 20) -> dict[str, Any]:
+        logger.debug("exec: %s", " ".join(cmd))
         try:
             proc = subprocess.run(
                 cmd,
