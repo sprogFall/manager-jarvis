@@ -105,6 +105,15 @@ export interface WorkspaceInfo {
   compose_files: string[];
 }
 
+export interface WorkspaceSummary {
+  workspace_id: string;
+  repo_url: string | null;
+  branch: string | null;
+  created_at: string | null;
+  updated_at: string;
+  compose_files_count: number;
+}
+
 export interface BuildFromWorkspacePayload {
   tag: string;
   context_path?: string;

@@ -56,7 +56,38 @@ describe('ApiClient', () => {
     expect(result.id).toBe('c1');
   });
 
+  it('requests task logs as text', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+      text: async () => 'line-1\\nline-2\\n',
+    });
 
+    const client = new ApiClient('http://localhost:8000', 'token-123');
+    const logs = await client.getTaskLogs('task-1', 500);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/tasks/task-1/logs?tail=500',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(logs).toBe('line-1\\nline-2\\n');
+  });
+
+  it('requests workspace list', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => [],
+      text: async () => '',
+    });
+
+    const client = new ApiClient('http://localhost:8000', 'token-123');
+    await client.getWorkspaces();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/images/git/workspaces',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
 
   it('requests and updates proxy config', async () => {
     fetchMock

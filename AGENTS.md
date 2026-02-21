@@ -150,7 +150,7 @@ apps/web/
 - 前端轮询 `GET /api/v1/tasks/{task_id}` 获取进度
 - 新增任务类型时需要：① 写 handler 函数 `task_xxx(params)` → ② 在 `register_default_handlers()` 中注册
 
-已注册任务类型：`image.pull`, `image.build`, `image.build.upload`, `image.load`, `image.save`, `stack.action`, `container.logs.export`, `image.git.clone`, `image.git.build`, `image.load.url`
+已注册任务类型：`image.pull`, `image.build`, `image.build.upload`, `image.load`, `image.save`, `stack.action`, `container.logs.export`, `image.git.clone`, `image.git.build`, `image.git.compose.action`, `image.git.sync`, `image.load.url`
 
 #### 2. 危险操作二次确认（utils/confirm.py）
 
@@ -217,6 +217,7 @@ apps/web/
 | `UPLOAD_DIR` | `./data/uploads` | 上传文件临时目录 |
 | `EXPORT_DIR` | `./data/exports` | 导出文件目录 |
 | `WORKSPACES_DIR` | `./data/workspaces` | Git 克隆工作区目录 |
+| `TASK_LOG_DIR` | `./data/task-logs` | 异步任务日志目录（用于任务进度日志查看） |
 | `MAX_UPLOAD_SIZE_MB` | `2048` | 上传文件大小上限 |
 | `ENABLE_WEB_TERMINAL` | `true` | 是否开启 Web Terminal |
 

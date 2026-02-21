@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+import selectors
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import HTTPException, status
 
@@ -80,11 +82,18 @@ class StackService:
         stack.compose_file.write_text(content, encoding="utf-8")
         return {"name": name, "compose_file": str(stack.compose_file)}
 
-    def run_action(self, name: str, action: str, force_recreate: bool = False) -> dict[str, Any]:
+    def run_action(
+        self,
+        name: str,
+        action: str,
+        force_recreate: bool = False,
+        *,
+        log_writer: Callable[[str], None] | None = None,
+    ) -> dict[str, Any]:
         stack = self._resolve_stack(name)
         base_cmd = ["docker", "compose", "-f", str(stack.compose_file), "-p", name]
         cmd = self._build_action_command(base_cmd, action, force_recreate)
-        result = self._run_command(cmd)
+        result = self._run_command_stream(cmd, log_writer=log_writer) if log_writer else self._run_command(cmd)
         return {"stack": name, "action": action, **result}
 
     def run_compose_action(
@@ -95,6 +104,7 @@ class StackService:
         action: str,
         force_recreate: bool = False,
         project_directory: Path | None = None,
+        log_writer: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         if not STACK_NAME_RE.match(project_name):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stack name")
@@ -104,7 +114,7 @@ class StackService:
         if project_directory:
             base_cmd.extend(["--project-directory", str(project_directory.resolve())])
         cmd = self._build_action_command(base_cmd, action, force_recreate)
-        result = self._run_command(cmd)
+        result = self._run_command_stream(cmd, log_writer=log_writer) if log_writer else self._run_command(cmd)
         return {
             "stack": project_name,
             "action": action,
@@ -254,6 +264,105 @@ class StackService:
         }
 
         if raise_on_error and proc.returncode != 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"message": "compose command failed", **result},
+            )
+        return result
+
+    def _run_command_stream(
+        self,
+        cmd: list[str],
+        *,
+        log_writer: Callable[[str], None] | None,
+        raise_on_error: bool = True,
+        timeout: int = 60 * 20,
+    ) -> dict[str, Any]:
+        logger.debug("exec(stream): %s", " ".join(cmd))
+        started = time.monotonic()
+        captured: list[str] = []
+        buffer = b""
+
+        def emit_line(text: str) -> None:
+            if not text:
+                return
+            if log_writer:
+                log_writer(text)
+            captured.append(text)
+            if len(captured) > 200:
+                del captured[:-200]
+
+        if log_writer:
+            log_writer(f"$ {' '.join(cmd)}")
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=False,
+            )
+        except OSError as exc:
+            result = {"exit_code": -1, "stdout": "", "stderr": str(exc), "command": " ".join(cmd)}
+            if log_writer:
+                log_writer(str(exc))
+            if raise_on_error:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail={"message": "compose command failed", **result},
+                ) from exc
+            return result
+
+        assert proc.stdout is not None
+        sel = selectors.DefaultSelector()
+        sel.register(proc.stdout, selectors.EVENT_READ)
+        try:
+            while True:
+                if time.monotonic() - started > timeout:
+                    proc.kill()
+                    emit_line(f"[timeout] exceeded {timeout}s")
+                    raise subprocess.TimeoutExpired(cmd=" ".join(cmd), timeout=timeout)
+
+                events = sel.select(timeout=0.25)
+                if events:
+                    chunk = proc.stdout.read1(4096)
+                    if not chunk:
+                        if proc.poll() is not None:
+                            break
+                        continue
+                    buffer += chunk
+                    while True:
+                        idx_n = buffer.find(b"\n")
+                        idx_r = buffer.find(b"\r")
+                        if idx_n == -1 and idx_r == -1:
+                            break
+                        candidates = [i for i in (idx_n, idx_r) if i != -1]
+                        idx = min(candidates)
+                        line_bytes = buffer[:idx]
+                        buffer = buffer[idx + 1 :]
+                        emit_line(line_bytes.decode("utf-8", errors="replace"))
+                else:
+                    if proc.poll() is not None:
+                        break
+
+            # Drain remaining
+            rest = proc.stdout.read()
+            if rest:
+                buffer += rest
+            if buffer:
+                emit_line(buffer.decode("utf-8", errors="replace"))
+                buffer = b""
+        finally:
+            sel.close()
+
+        exit_code = proc.wait()
+        result = {
+            "exit_code": exit_code,
+            "stdout": "\n".join(captured),
+            "stderr": "",
+            "command": " ".join(cmd),
+        }
+        if raise_on_error and exit_code != 0:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail={"message": "compose command failed", **result},

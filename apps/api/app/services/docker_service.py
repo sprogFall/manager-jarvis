@@ -5,7 +5,7 @@ import os
 from collections.abc import Generator
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import docker
 from docker.errors import APIError, DockerException, ImageNotFound, NotFound
@@ -204,12 +204,24 @@ class DockerService:
             )
         return data
 
-    def pull_image(self, image: str, tag: str | None = None, auth: dict[str, Any] | None = None) -> dict[str, Any]:
+    def pull_image(
+        self,
+        image: str,
+        tag: str | None = None,
+        auth: dict[str, Any] | None = None,
+        *,
+        log_writer: Callable[[str], None] | None = None,
+    ) -> dict[str, Any]:
         api = self.client.api
         target = f"{image}:{tag}" if tag else image
         progress: list[dict[str, Any]] = []
         for line in api.pull(repository=image, tag=tag, stream=True, decode=True, auth_config=auth):
             progress.append(line)
+            if log_writer:
+                try:
+                    log_writer(json.dumps(line, ensure_ascii=False))
+                except TypeError:
+                    log_writer(str(line))
         return {"target": target, "events": progress[-50:]}
 
     def remove_image(self, image: str, force: bool = False, noprune: bool = False) -> list[dict[str, Any]]:
@@ -233,6 +245,7 @@ class DockerService:
         no_cache: bool = False,
         pull: bool = False,
         git_url: str | None = None,
+        log_writer: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         build_path = git_url or path
         if not build_path:
@@ -248,6 +261,11 @@ class DockerService:
             rm=True,
         ):
             output.append(chunk)
+            if log_writer:
+                try:
+                    log_writer(json.dumps(chunk, ensure_ascii=False))
+                except TypeError:
+                    log_writer(str(chunk))
         return {"tag": tag, "events": output[-100:]}
 
     def build_image_from_archive(
@@ -258,6 +276,7 @@ class DockerService:
         dockerfile: str = "Dockerfile",
         no_cache: bool = False,
         pull: bool = False,
+        log_writer: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         output: list[dict[str, Any]] = []
         encoding = "gzip" if str(archive_path).endswith(".gz") else None
@@ -274,6 +293,11 @@ class DockerService:
                 rm=True,
             ):
                 output.append(chunk)
+                if log_writer:
+                    try:
+                        log_writer(json.dumps(chunk, ensure_ascii=False))
+                    except TypeError:
+                        log_writer(str(chunk))
         return {"tag": tag, "events": output[-100:]}
 
     def load_image_from_file(self, file_path: Path) -> dict[str, Any]:

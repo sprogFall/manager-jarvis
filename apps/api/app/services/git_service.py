@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
+import selectors
 import shutil
 import subprocess
+import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urlparse, urlunparse
 
 from app.core.config import get_settings
@@ -20,12 +25,43 @@ GIT_MISSING_MESSAGE = "git command not found in runtime image"
 
 
 class GitService:
+    def list_workspaces(self) -> list[dict]:
+        settings.workspaces_path.mkdir(parents=True, exist_ok=True)
+        items: list[dict] = []
+        for child in settings.workspaces_path.iterdir():
+            if not child.is_dir():
+                continue
+            workspace_id = child.name
+            try:
+                _validate_workspace_id(workspace_id)
+            except ValueError:
+                continue
+
+            meta = self._read_workspace_meta(child)
+            updated_at = datetime.fromtimestamp(child.stat().st_mtime, tz=timezone.utc).isoformat()
+            compose_files = self._discover_compose_files(child)
+            items.append(
+                {
+                    "workspace_id": workspace_id,
+                    "repo_url": meta.get("repo_url"),
+                    "branch": meta.get("branch"),
+                    "created_at": meta.get("created_at"),
+                    "updated_at": updated_at,
+                    "compose_files_count": len(compose_files),
+                }
+            )
+
+        items.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
+        return items
+
     def clone(
         self,
         repo_url: str,
         branch: str | None = None,
         token: str | None = None,
         proxy_url: str | None = None,
+        *,
+        log_writer: Callable[[str], None] | None = None,
     ) -> tuple[str, Path]:
         """Clone a git repo into a new workspace. Returns (workspace_id, workspace_path)."""
         workspace_id = uuid.uuid4().hex
@@ -36,12 +72,90 @@ class GitService:
         cmd = ["git", "clone", "--depth", "1"]
         if branch:
             cmd.extend(["--branch", branch])
+        if log_writer:
+            cmd.append("--progress")
         cmd.extend([clone_url, str(workspace_path)])
 
         env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
         env = build_proxy_env(env, proxy_url)
         try:
-            subprocess.run(cmd, check=True, capture_output=True, timeout=300, env=env)
+            if log_writer:
+                display_cmd = ["git", "clone", "--depth", "1"]
+                if branch:
+                    display_cmd.extend(["--branch", branch])
+                display_cmd.append("--progress")
+                display_cmd.extend([repo_url, str(workspace_path)])
+                log_writer(f"$ {' '.join(display_cmd)}")
+
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=False,
+                    env=env,
+                )
+                assert proc.stdout is not None
+                sel = selectors.DefaultSelector()
+                sel.register(proc.stdout, selectors.EVENT_READ)
+                started = time.monotonic()
+                buffer = b""
+                captured: list[str] = []
+                try:
+                    while True:
+                        if time.monotonic() - started > 300:
+                            proc.kill()
+                            raise subprocess.TimeoutExpired(cmd=" ".join(display_cmd), timeout=300)
+
+                        events = sel.select(timeout=0.25)
+                        if events:
+                            chunk = proc.stdout.read1(4096)
+                            if not chunk:
+                                if proc.poll() is not None:
+                                    break
+                                continue
+                            buffer += chunk
+                            while True:
+                                idx_n = buffer.find(b"\n")
+                                idx_r = buffer.find(b"\r")
+                                if idx_n == -1 and idx_r == -1:
+                                    break
+                                candidates = [i for i in (idx_n, idx_r) if i != -1]
+                                idx = min(candidates)
+                                line_bytes = buffer[:idx]
+                                buffer = buffer[idx + 1 :]
+                                text = line_bytes.decode("utf-8", errors="replace")
+                                if token:
+                                    text = text.replace(token, "***")
+                                log_writer(text)
+                                captured.append(text)
+                                if len(captured) > 80:
+                                    del captured[:-80]
+                        else:
+                            if proc.poll() is not None:
+                                break
+
+                    rest = proc.stdout.read()
+                    if rest:
+                        buffer += rest
+                    if buffer:
+                        text = buffer.decode("utf-8", errors="replace")
+                        if token:
+                            text = text.replace(token, "***")
+                        for item in text.splitlines():
+                            log_writer(item)
+                            captured.append(item)
+                            if len(captured) > 80:
+                                del captured[:-80]
+                finally:
+                    sel.close()
+
+                exit_code = proc.wait()
+                if exit_code != 0:
+                    shutil.rmtree(workspace_path, ignore_errors=True)
+                    message = "\n".join(captured[-20:]) or "git clone failed"
+                    raise RuntimeError(f"git clone failed: {message}")
+            else:
+                subprocess.run(cmd, check=True, capture_output=True, timeout=300, env=env)
         except FileNotFoundError as exc:
             shutil.rmtree(workspace_path, ignore_errors=True)
             if exc.filename == "git":
@@ -83,6 +197,37 @@ class GitService:
             "directories": directories,
             "compose_files": compose_files,
         }
+
+    def write_workspace_meta(self, workspace_id: str, *, repo_url: str, branch: str | None = None) -> None:
+        workspace_path = self.get_workspace_path(workspace_id)
+        meta_path = workspace_path / ".jarvis" / "workspace.json"
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(
+            json.dumps(
+                {
+                    "workspace_id": workspace_id,
+                    "repo_url": repo_url,
+                    "branch": branch,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+    def _read_workspace_meta(self, workspace_path: Path) -> dict:
+        meta_path = workspace_path / ".jarvis" / "workspace.json"
+        if not meta_path.exists() or not meta_path.is_file():
+            return {}
+        try:
+            raw = meta_path.read_text(encoding="utf-8")
+        except OSError:
+            return {}
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return data if isinstance(data, dict) else {}
 
     def cleanup(self, workspace_id: str) -> None:
         _validate_workspace_id(workspace_id)
@@ -183,19 +328,42 @@ class GitService:
             cleaned = "app"
         return f"ws-{workspace_id[:8]}-{cleaned}"[:50]
 
-    def sync_workspace(self, workspace_id: str, proxy_url: str | None = None) -> dict[str, str]:
+    def sync_workspace(
+        self,
+        workspace_id: str,
+        proxy_url: str | None = None,
+        *,
+        log_writer: Callable[[str], None] | None = None,
+    ) -> dict[str, str]:
         workspace_path = self.get_workspace_path(workspace_id)
         env = build_proxy_env({**os.environ, "GIT_TERMINAL_PROMPT": "0"}, proxy_url)
 
         try:
-            pull_proc = subprocess.run(
-                ["git", "-C", str(workspace_path), "pull", "--ff-only"],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                env=env,
-            )
+            pull_cmd = ["git", "-C", str(workspace_path), "pull", "--ff-only"]
+            if log_writer:
+                log_writer(f"$ {' '.join(pull_cmd)}")
+                proc = subprocess.run(
+                    pull_cmd,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    env=env,
+                )
+                if proc.stdout.strip():
+                    log_writer(proc.stdout.strip())
+                if proc.stderr.strip():
+                    log_writer(proc.stderr.strip())
+                pull_proc = proc
+            else:
+                pull_proc = subprocess.run(
+                    pull_cmd,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    env=env,
+                )
         except FileNotFoundError as exc:
             if exc.filename == "git":
                 raise RuntimeError(GIT_MISSING_MESSAGE) from exc

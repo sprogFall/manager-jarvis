@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     upload_dir: str = Field(default="./data/uploads", alias="UPLOAD_DIR")
     export_dir: str = Field(default="./data/exports", alias="EXPORT_DIR")
     workspaces_dir: str = Field(default="./data/workspaces", alias="WORKSPACES_DIR")
+    task_log_dir: str = Field(default="./data/task-logs", alias="TASK_LOG_DIR")
     max_upload_size_mb: int = Field(default=2048, alias="MAX_UPLOAD_SIZE_MB")
     enable_web_terminal: bool = Field(default=True, alias="ENABLE_WEB_TERMINAL")
     frontend_dist_dir: str = Field(default="", alias="FRONTEND_DIST_DIR")
@@ -45,6 +46,10 @@ class Settings(BaseSettings):
     @property
     def workspaces_path(self) -> Path:
         return Path(self.workspaces_dir).resolve()
+
+    @property
+    def task_logs_path(self) -> Path:
+        return Path(self.task_log_dir).resolve()
 
     @property
     def frontend_dist_path(self) -> Path | None:

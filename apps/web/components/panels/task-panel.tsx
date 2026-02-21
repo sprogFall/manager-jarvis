@@ -7,6 +7,8 @@ import type { TaskRecord } from '@/lib/types';
 
 interface TaskPanelProps {
   loadTasks: () => Promise<TaskRecord[]>;
+  getTask: (taskId: string) => Promise<TaskRecord>;
+  getTaskLogs: (taskId: string, tail?: number) => Promise<string>;
 }
 
 interface Notice {
@@ -14,10 +16,15 @@ interface Notice {
   text: string;
 }
 
-export function TaskPanel({ loadTasks }: TaskPanelProps) {
+export function TaskPanel({ loadTasks, getTask, getTaskLogs }: TaskPanelProps) {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskRecord | null>(null);
+  const [taskLogs, setTaskLogs] = useState<string>('');
+  const [taskDetailLoading, setTaskDetailLoading] = useState(false);
+  const [taskDetailError, setTaskDetailError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   async function refresh() {
     setLoading(true);
@@ -30,10 +37,59 @@ export function TaskPanel({ loadTasks }: TaskPanelProps) {
     }
   }
 
+  async function refreshTaskDetail(taskId: string, { quiet = false }: { quiet?: boolean } = {}) {
+    if (!quiet) {
+      setTaskDetailLoading(true);
+    }
+    setTaskDetailError(null);
+    try {
+      const detail = await getTask(taskId);
+      setSelectedTask(detail);
+      const logs = await getTaskLogs(taskId, 500);
+      setTaskLogs(logs);
+    } catch (error) {
+      setTaskDetailError(error instanceof Error ? error.message : '任务详情加载失败');
+    } finally {
+      setTaskDetailLoading(false);
+    }
+  }
+
+  function openTask(task: TaskRecord) {
+    setSelectedTask(task);
+    setTaskLogs('');
+    setTaskDetailError(null);
+    setAutoRefresh(task.status === 'queued' || task.status === 'running');
+    void refreshTaskDetail(task.id);
+  }
+
+  function closeTask() {
+    setSelectedTask(null);
+    setTaskLogs('');
+    setTaskDetailError(null);
+    setTaskDetailLoading(false);
+    setAutoRefresh(true);
+  }
+
   useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!selectedTask || !autoRefresh) {
+      return;
+    }
+    if (selectedTask.status !== 'queued' && selectedTask.status !== 'running') {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void refreshTaskDetail(selectedTask.id, { quiet: true });
+    }, 1200);
+    return () => {
+      window.clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTask?.id, selectedTask?.status, autoRefresh]);
 
   return (
     <section className="panel">
@@ -69,6 +125,7 @@ export function TaskPanel({ loadTasks }: TaskPanelProps) {
               <th>状态</th>
               <th>资源</th>
               <th>创建时间</th>
+              <th>日志</th>
             </tr>
           </thead>
           <tbody>
@@ -90,13 +147,16 @@ export function TaskPanel({ loadTasks }: TaskPanelProps) {
                     <td>
                       <span className="skeleton-line skeleton-short" />
                     </td>
+                    <td>
+                      <span className="skeleton-line skeleton-short" />
+                    </td>
                   </tr>
                 ))
               : null}
 
             {!loading && tasks.length === 0 ? (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <div className="empty-state">暂无任务记录</div>
                 </td>
               </tr>
@@ -114,12 +174,114 @@ export function TaskPanel({ loadTasks }: TaskPanelProps) {
                     </td>
                     <td data-label="资源">{task.resource_id ?? '-'}</td>
                     <td data-label="创建时间">{formatTime(task.created_at)}</td>
+                    <td data-label="日志">
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => openTask(task)}>
+                        查看日志
+                      </button>
+                    </td>
                   </tr>
                 ))
               : null}
           </tbody>
         </table>
       </div>
+
+      {selectedTask ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="任务详情">
+          <div className="modal">
+            <div className="modal-head">
+              <div>
+                <p className="cell-main">任务详情</p>
+                <p className="cell-sub mono">{selectedTask.id}</p>
+              </div>
+              <div className="row-actions">
+                <label className="muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={autoRefresh}
+                    onChange={(event) => setAutoRefresh(event.target.checked)}
+                  />
+                  自动刷新
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => void refreshTaskDetail(selectedTask.id)}
+                  disabled={taskDetailLoading}
+                >
+                  {taskDetailLoading ? '刷新中...' : '刷新'}
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={closeTask}>
+                  关闭
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-body">
+              <div className="table-wrap" style={{ minWidth: 0 }}>
+                <table style={{ minWidth: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>字段</th>
+                      <th>值</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>类型</td>
+                      <td>{formatTaskType(selectedTask.task_type)}</td>
+                    </tr>
+                    <tr>
+                      <td>状态</td>
+                      <td>
+                        <span className={`status status-${selectedTask.status}`}>{formatStatus(selectedTask.status)}</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>资源</td>
+                      <td className="mono">{selectedTask.resource_id ?? '-'}</td>
+                    </tr>
+                    <tr>
+                      <td>创建</td>
+                      <td>{formatTime(selectedTask.created_at)}</td>
+                    </tr>
+                    <tr>
+                      <td>开始</td>
+                      <td>{formatTime(selectedTask.started_at)}</td>
+                    </tr>
+                    <tr>
+                      <td>结束</td>
+                      <td>{formatTime(selectedTask.finished_at)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {taskDetailError ? (
+                <p className="notice notice-error" role="alert">
+                  {taskDetailError}
+                </p>
+              ) : null}
+
+              <div>
+                <p className="muted" style={{ marginBottom: 6 }}>
+                  日志（最近 500 行）
+                </p>
+                <pre className="log-box">{taskLogs || (taskDetailLoading ? '加载中...' : '暂无日志')}</pre>
+              </div>
+
+              {selectedTask.error ? (
+                <div>
+                  <p className="muted" style={{ marginBottom: 6 }}>
+                    错误信息
+                  </p>
+                  <pre className="log-box">{selectedTask.error}</pre>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

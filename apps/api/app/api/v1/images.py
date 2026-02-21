@@ -22,6 +22,7 @@ from app.schemas.image import (
     WorkspaceComposeInfo,
     WorkspaceComposeUpdateRequest,
     WorkspaceInfo,
+    WorkspaceSummary,
 )
 from app.services.docker_service import DockerService
 from app.services.git_service import GitService
@@ -228,6 +229,12 @@ def git_clone_repo(
         detail={"task_id": task_id},
     )
     return {"task_id": task_id}
+
+
+@router.get("/git/workspaces", response_model=list[WorkspaceSummary])
+def list_workspaces(_: User = Depends(get_current_admin)) -> list[WorkspaceSummary]:
+    service = GitService()
+    return [WorkspaceSummary.model_validate(item) for item in service.list_workspaces()]
 
 
 @router.get("/git/workspace/{workspace_id}", response_model=WorkspaceInfo)

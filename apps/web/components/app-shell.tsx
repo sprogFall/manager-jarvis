@@ -8,6 +8,7 @@ import { ImagePanel } from '@/components/panels/image-panel';
 import { ProxyPanel } from '@/components/panels/proxy-panel';
 import { StackPanel } from '@/components/panels/stack-panel';
 import { TaskPanel } from '@/components/panels/task-panel';
+import { WorkspacePanel } from '@/components/panels/workspace-panel';
 import { ApiClient } from '@/lib/api';
 
 const SECTION_META = {
@@ -20,6 +21,11 @@ const SECTION_META = {
     label: '镜像',
     title: '镜像管理',
     description: '统一处理拉取、删除、Git 构建与离线加载。',
+  },
+  workspaces: {
+    label: '工作区',
+    title: 'Git 工作区',
+    description: '管理已克隆代码，继续 Compose/Sync/Build。',
   },
   stacks: {
     label: '栈',
@@ -75,6 +81,15 @@ function IconStack() {
       <path d="M3 13l7 4 7-4" />
       <path d="M3 9l7 4 7-4" />
       <path d="M3 5l7 4 7-4-7-4z" />
+    </svg>
+  );
+}
+
+function IconWorkspace() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6.5h6l1 1H17v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <path d="M3 6.5v-1a2 2 0 0 1 2-2h3l1 1h6a2 2 0 0 1 2 2v1" />
     </svg>
   );
 }
@@ -137,6 +152,7 @@ function IconMore() {
 const SECTION_ICONS: Record<Section, () => React.JSX.Element> = {
   containers: IconContainer,
   images: IconImage,
+  workspaces: IconWorkspace,
   stacks: IconStack,
   tasks: IconTask,
   audit: IconAudit,
@@ -181,6 +197,7 @@ const noClient = {
     finished_at: null,
   }),
   getWorkspace: async () => ({ workspace_id: '', dockerfiles: [], directories: [], compose_files: [] }),
+  getWorkspaces: async () => [],
   getWorkspaceCompose: async () => ({
     workspace_id: '',
     compose_files: [],
@@ -200,13 +217,14 @@ const noClient = {
   getStacks: async () => [],
   runStackAction: async () => ({ task_id: 'task-demo' }),
   getTasks: async () => [],
+  getTaskLogs: async () => '',
   getAuditLogs: async () => [],
   getProxyConfig: async () => ({ proxy_url: null }),
   updateProxyConfig: async () => ({ proxy_url: null }),
 };
 
 const TAB_SECTIONS: Section[] = ['containers', 'images', 'stacks', 'tasks'];
-const MORE_SECTIONS: Section[] = ['audit', 'proxy'];
+const MORE_SECTIONS: Section[] = ['workspaces', 'audit', 'proxy'];
 
 export function AppShell({ client, onLogout }: AppShellProps) {
   const [section, setSection] = useState<Section>('containers');
@@ -286,11 +304,28 @@ export function AppShell({ client, onLogout }: AppShellProps) {
         />
       );
     }
+    if (section === 'workspaces') {
+      return (
+        <WorkspacePanel
+          loadWorkspaces={() => api.getWorkspaces()}
+          gitClone={(payload) => api.gitClone(payload)}
+          getTask={(taskId) => api.getTask(taskId)}
+          getWorkspace={(id) => api.getWorkspace(id)}
+          getWorkspaceCompose={(id, composePath, source) => api.getWorkspaceCompose(id, composePath, source)}
+          saveWorkspaceCompose={(id, payload) => api.saveWorkspaceCompose(id, payload)}
+          clearWorkspaceCompose={(id, composePath) => api.clearWorkspaceCompose(id, composePath)}
+          runWorkspaceComposeAction={(id, action, payload) => api.runWorkspaceComposeAction(id, action, payload)}
+          syncWorkspace={(id) => api.syncWorkspace(id)}
+          buildFromWorkspace={(id, payload) => api.buildFromWorkspace(id, payload)}
+          deleteWorkspace={(id) => api.deleteWorkspace(id)}
+        />
+      );
+    }
     if (section === 'stacks') {
       return <StackPanel loadStacks={() => api.getStacks()} runStackAction={(name, action) => api.runStackAction(name, action)} />;
     }
     if (section === 'tasks') {
-      return <TaskPanel loadTasks={() => api.getTasks()} />;
+      return <TaskPanel loadTasks={() => api.getTasks()} getTask={(id) => api.getTask(id)} getTaskLogs={(id, tail) => api.getTaskLogs(id, tail)} />;
     }
     if (section === 'proxy') {
       return <ProxyPanel loadProxy={() => api.getProxyConfig()} updateProxy={(payload) => api.updateProxyConfig(payload)} />;

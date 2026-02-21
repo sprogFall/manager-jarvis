@@ -58,6 +58,40 @@ class TestGetWorkspaceEndpoint:
         assert resp.status_code != 200
 
 
+class TestListWorkspacesEndpoint:
+    def test_list_workspaces_returns_meta(self, client, runtime_paths):
+        ws_id = "a" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        meta_path = ws_path / ".jarvis" / "workspace.json"
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(
+            '{"workspace_id":"%s","repo_url":"https://github.com/user/repo.git","branch":"main","created_at":"2026-01-01T00:00:00Z"}'
+            % ws_id,
+            encoding="utf-8",
+        )
+
+        other_id = "b" * 32
+        (runtime_paths["workspaces"] / other_id).mkdir(parents=True, exist_ok=True)
+        (runtime_paths["workspaces"] / "not-a-workspace").mkdir(parents=True, exist_ok=True)
+
+        resp = client.get("/api/v1/images/git/workspaces")
+        assert resp.status_code == 200
+        body = resp.json()
+
+        ids = [item["workspace_id"] for item in body]
+        assert ws_id in ids
+        assert other_id in ids
+        assert "not-a-workspace" not in ids
+
+        entry = next(item for item in body if item["workspace_id"] == ws_id)
+        assert entry["repo_url"] == "https://github.com/user/repo.git"
+        assert entry["branch"] == "main"
+        assert entry["created_at"] == "2026-01-01T00:00:00Z"
+        assert "updated_at" in entry
+        assert entry["compose_files_count"] == 0
+
+
 class TestBuildFromWorkspaceEndpoint:
     def test_build_from_workspace_enqueues_task(self, client, fake_task_manager, runtime_paths):
         ws_id = "c" * 32

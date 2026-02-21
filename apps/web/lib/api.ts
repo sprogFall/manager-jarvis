@@ -21,6 +21,7 @@ import type {
   WorkspaceComposeUpdatePayload,
   WorkspaceComposeUpdateResult,
   WorkspaceInfo,
+  WorkspaceSummary,
 } from '@/lib/types';
 
 function trimSlash(value: string): string {
@@ -59,6 +60,26 @@ export class ApiClient {
     }
 
     return (await response.json()) as T;
+  }
+
+  private async requestText(path: string, init: RequestInit = {}): Promise<string> {
+    const headers = new Headers(init.headers);
+    if (this.token) {
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      ...init,
+      headers,
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Request failed: ${response.status}`);
+    }
+
+    return await response.text();
   }
 
   static async login(baseUrl: string, payload: LoginPayload): Promise<TokenResponse> {
@@ -132,6 +153,11 @@ export class ApiClient {
     return this.request<TaskRecord>(`/api/v1/tasks/${encodeURIComponent(taskId)}`);
   }
 
+  getTaskLogs(taskId: string, tail = 200): Promise<string> {
+    const query = new URLSearchParams({ tail: String(tail) });
+    return this.requestText(`/api/v1/tasks/${encodeURIComponent(taskId)}/logs?${query.toString()}`, { method: 'GET' });
+  }
+
   getAuditLogs(): Promise<AuditLogRecord[]> {
     return this.request<AuditLogRecord[]>('/api/v1/audit-logs');
   }
@@ -145,6 +171,10 @@ export class ApiClient {
 
   getWorkspace(workspaceId: string): Promise<WorkspaceInfo> {
     return this.request<WorkspaceInfo>(`/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}`);
+  }
+
+  getWorkspaces(): Promise<WorkspaceSummary[]> {
+    return this.request<WorkspaceSummary[]>('/api/v1/images/git/workspaces');
   }
 
   getWorkspaceCompose(

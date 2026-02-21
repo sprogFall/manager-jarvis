@@ -837,6 +837,62 @@ tbody tr:last-child td {
   font-size: 0.8125rem;
 }
 
+/* ===== Modal ===== */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+
+.modal {
+  width: min(980px, 100%);
+  max-height: 85vh;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.modal-head {
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-dim);
+}
+
+.modal-body {
+  padding: 16px;
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+}
+
+.log-box {
+  border: 1px solid var(--border);
+  background: #0b1220;
+  color: #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  white-space: pre;
+  overflow: auto;
+  max-height: 340px;
+}
+
 /* ===== Stack Grid ===== */
 
 .stack-grid {

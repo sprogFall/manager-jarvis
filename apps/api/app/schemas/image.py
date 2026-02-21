@@ -48,6 +48,15 @@ class GitCloneRequest(BaseModel):
     token: str | None = None  # personal access token for private repos
 
 
+class WorkspaceSummary(BaseModel):
+    workspace_id: str
+    repo_url: str | None = None
+    branch: str | None = None
+    created_at: str | None = None
+    updated_at: str
+    compose_files_count: int = 0
+
+
 class WorkspaceInfo(BaseModel):
     workspace_id: str
     dockerfiles: list[str]

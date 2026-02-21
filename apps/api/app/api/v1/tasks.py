@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit_log
@@ -15,6 +15,22 @@ from app.services.task_service import get_task_manager
 
 settings = get_settings()
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+MAX_LOG_TAIL_LINES = 5000
+MAX_LOG_BYTES = 1024 * 1024  # 1 MiB
+
+
+def _read_log_tail(file_path: Path, tail: int) -> str:
+    if tail <= 0:
+        return ""
+    data = file_path.read_bytes()
+    if len(data) > MAX_LOG_BYTES:
+        data = data[-MAX_LOG_BYTES:]
+    text = data.decode("utf-8", errors="replace")
+    lines = text.splitlines(keepends=True)
+    if len(lines) <= tail:
+        return "".join(lines)
+    return "".join(lines[-tail:])
 
 
 def _to_task_response(rec: TaskRecord) -> TaskResponse:
@@ -88,3 +104,24 @@ def download_task_file(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="File path not allowed")
 
     return FileResponse(path=file_path, filename=file_path.name, media_type="application/octet-stream")
+
+
+@router.get("/{task_id}/logs")
+def get_task_logs(
+    task_id: str,
+    tail: int = Query(default=200, ge=0, le=MAX_LOG_TAIL_LINES),
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> PlainTextResponse:
+    # Ensure task exists and caller has access.
+    get_task_manager().get_task(db, task_id)
+
+    logs_root = settings.task_logs_path.resolve()
+    file_path = (logs_root / f"{task_id}.log").resolve()
+    if logs_root not in file_path.parents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid task_id")
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task log not found")
+
+    content = _read_log_tail(file_path, tail=tail)
+    return PlainTextResponse(content=content, media_type="text/plain; charset=utf-8")
