@@ -174,17 +174,20 @@ class DockerService:
         privileged: bool = False,
     ) -> dict[str, Any]:
         container = self._get_container(container_id)
-        exec_id = self.client.api.exec_create(
-            container.id,
-            cmd,
-            user=user,
-            workdir=workdir,
-            tty=tty,
-            privileged=privileged,
-            stdin=False,
-            stdout=True,
-            stderr=True,
-        )["Id"]
+        # docker stubs model `user` as required; only pass it when provided.
+        exec_kwargs: dict[str, Any] = {
+            "tty": tty,
+            "privileged": privileged,
+            "stdin": False,
+            "stdout": True,
+            "stderr": True,
+        }
+        if user is not None:
+            exec_kwargs["user"] = user
+        if workdir is not None:
+            exec_kwargs["workdir"] = workdir
+
+        exec_id = self.client.api.exec_create(container.id, cmd, **exec_kwargs)["Id"]
         output = self.client.api.exec_start(exec_id, tty=tty, stream=False)
         inspect = self.client.api.exec_inspect(exec_id)
         out_text = output.decode("utf-8", errors="replace") if isinstance(output, bytes) else str(output)
@@ -232,7 +235,14 @@ class DockerService:
                 detail=f"Image is used by containers: {', '.join(refs)}",
             )
         try:
-            return self.client.images.remove(image=image, force=force, noprune=noprune)
+            raw = self.client.api.remove_image(image=image, force=force, noprune=noprune)
+            if raw is None:
+                return []
+            if isinstance(raw, list):
+                return raw
+            if isinstance(raw, dict):
+                return [raw]
+            return [{"Deleted": str(raw)}]
         except ImageNotFound as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found") from exc
 
@@ -394,11 +404,15 @@ class DockerService:
         refs: list[str] = []
         for container in self.client.containers.list(all=True):
             try:
-                image_id = container.image.id
-                tags = set(container.image.tags or [])
-                possible_refs = tags | {image_id, container.image.short_id}
+                img = container.image
+                if img is None:
+                    continue
+                image_id = img.id
+                tags = {tag for tag in (img.tags or []) if tag}
+                possible_refs = tags | {image_id, img.short_id}
                 if image_ref in possible_refs:
-                    refs.append(container.name)
+                    cid = container.id or ""
+                    refs.append(container.name or cid[:12] or "unknown")
             except Exception:  # noqa: BLE001
                 continue
         return refs

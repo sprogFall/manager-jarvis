@@ -18,6 +18,32 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 MAX_LOG_TAIL_LINES = 5000
 MAX_LOG_BYTES = 1024 * 1024  # 1 MiB
+REDACTED_VALUE = "***"
+
+
+def _is_sensitive_key(key: str) -> bool:
+    clean = (key or "").strip().lower()
+    if clean in {"password", "token", "auth_token", "access_token", "refresh_token"}:
+        return True
+    if clean.endswith("_token") or clean.endswith("_password"):
+        return True
+    return False
+
+
+def _redact_payload(value):
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        redacted: dict = {}
+        for k, v in value.items():
+            if isinstance(k, str) and _is_sensitive_key(k):
+                redacted[k] = REDACTED_VALUE if v is not None else None
+            else:
+                redacted[k] = _redact_payload(v)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_payload(item) for item in value]
+    return value
 
 
 def _read_log_tail(file_path: Path, tail: int) -> str:
@@ -40,7 +66,7 @@ def _to_task_response(rec: TaskRecord) -> TaskResponse:
         status=rec.status,
         resource_type=rec.resource_type,
         resource_id=rec.resource_id,
-        params=rec.params,
+        params=_redact_payload(rec.params),
         result=rec.result,
         error=rec.error,
         retry_of=rec.retry_of,

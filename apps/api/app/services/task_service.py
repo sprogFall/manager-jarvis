@@ -307,6 +307,7 @@ def task_load_image_from_url(params: dict[str, Any]) -> dict[str, Any]:
     import ssl
     import urllib.request
     import uuid as _uuid
+    from urllib.parse import urlparse
 
     from app.services.proxy_service import get_runtime_proxy_url
 
@@ -314,6 +315,11 @@ def task_load_image_from_url(params: dict[str, Any]) -> dict[str, Any]:
     url = params["url"]
     auth_token = params.get("auth_token")
     proxy_url = get_runtime_proxy_url()
+
+    if proxy_url:
+        scheme = urlparse(proxy_url).scheme.lower()
+        if scheme in {"socks5", "socks5h"}:
+            raise ValueError("URL 下载暂不支持 socks5 代理，请使用 http/https 代理")
 
     # Determine filename from URL path
     url_path = url.split("?")[0].rstrip("/")

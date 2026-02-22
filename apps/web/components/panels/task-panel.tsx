@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react';
 
 import { formatStatus, formatTaskType, formatTime } from '@/lib/format';
-import type { TaskRecord } from '@/lib/types';
+import type { DownloadTaskFileResult, RetryTaskResponse, TaskRecord } from '@/lib/types';
 
 interface TaskPanelProps {
   loadTasks: () => Promise<TaskRecord[]>;
   getTask: (taskId: string) => Promise<TaskRecord>;
   getTaskLogs: (taskId: string, tail?: number) => Promise<string>;
+  retryTask: (taskId: string) => Promise<RetryTaskResponse>;
+  downloadTaskFile: (taskId: string) => Promise<DownloadTaskFileResult>;
 }
 
 interface Notice {
@@ -16,7 +18,7 @@ interface Notice {
   text: string;
 }
 
-export function TaskPanel({ loadTasks, getTask, getTaskLogs }: TaskPanelProps) {
+export function TaskPanel({ loadTasks, getTask, getTaskLogs, retryTask, downloadTaskFile }: TaskPanelProps) {
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -25,6 +27,7 @@ export function TaskPanel({ loadTasks, getTask, getTaskLogs }: TaskPanelProps) {
   const [taskDetailLoading, setTaskDetailLoading] = useState(false);
   const [taskDetailError, setTaskDetailError] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [actionWorking, setActionWorking] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -51,6 +54,52 @@ export function TaskPanel({ loadTasks, getTask, getTaskLogs }: TaskPanelProps) {
       setTaskDetailError(error instanceof Error ? error.message : '任务详情加载失败');
     } finally {
       setTaskDetailLoading(false);
+    }
+  }
+
+  async function runRetry(taskId: string) {
+    setActionWorking(true);
+    setTaskDetailError(null);
+    try {
+      const result = await retryTask(taskId);
+      setAutoRefresh(true);
+      await refresh();
+      await refreshTaskDetail(result.new_task_id);
+    } catch (error) {
+      setTaskDetailError(error instanceof Error ? error.message : '任务重试失败');
+    } finally {
+      setActionWorking(false);
+    }
+  }
+
+  async function runDownload(taskId: string) {
+    setActionWorking(true);
+    setTaskDetailError(null);
+    try {
+      const result = await downloadTaskFile(taskId);
+
+      if (typeof window === 'undefined' || typeof document === 'undefined') {
+        throw new Error('当前环境不支持下载');
+      }
+      if (typeof window.URL?.createObjectURL !== 'function') {
+        throw new Error('浏览器不支持 blob 下载');
+      }
+
+      const url = window.URL.createObjectURL(result.blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = result.filename || `task-${taskId}`;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      if (typeof window.URL.revokeObjectURL === 'function') {
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      setTaskDetailError(error instanceof Error ? error.message : '下载任务结果失败');
+    } finally {
+      setActionWorking(false);
     }
   }
 
@@ -195,6 +244,28 @@ export function TaskPanel({ loadTasks, getTask, getTaskLogs }: TaskPanelProps) {
                 <p className="cell-sub mono">{selectedTask.id}</p>
               </div>
               <div className="row-actions">
+                {selectedTask.status === 'failed' ? (
+                  <button
+                    type="button"
+                    className="btn btn-subtle btn-sm"
+                    onClick={() => void runRetry(selectedTask.id)}
+                    disabled={taskDetailLoading || actionWorking}
+                  >
+                    重试
+                  </button>
+                ) : null}
+
+                {selectedTask.status === 'success' && selectedTask.result && typeof selectedTask.result.file === 'string' ? (
+                  <button
+                    type="button"
+                    className="btn btn-subtle btn-sm"
+                    onClick={() => void runDownload(selectedTask.id)}
+                    disabled={taskDetailLoading || actionWorking}
+                  >
+                    下载结果
+                  </button>
+                ) : null}
+
                 <label className="muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <input
                     type="checkbox"
@@ -207,7 +278,7 @@ export function TaskPanel({ loadTasks, getTask, getTaskLogs }: TaskPanelProps) {
                   type="button"
                   className="btn btn-ghost btn-sm"
                   onClick={() => void refreshTaskDetail(selectedTask.id)}
-                  disabled={taskDetailLoading}
+                  disabled={taskDetailLoading || actionWorking}
                 >
                   {taskDetailLoading ? '刷新中...' : '刷新'}
                 </button>

@@ -47,6 +47,37 @@ class TestTasksAPI:
         assert resp.status_code == 200
         assert resp.json()["id"] == "task-1"
 
+    def test_task_detail_redacts_sensitive_params(self, client, fake_task_manager):
+        fake_task_manager.records["task-1"] = TaskRecord(
+            id="task-1",
+            task_type="image.git.clone",
+            status="queued",
+            resource_type="image",
+            resource_id="https://github.com/user/repo.git",
+            params={
+                "repo_url": "https://github.com/user/repo.git",
+                "token": "ghp_secret",
+                "auth_token": "bearer_secret",
+                "auth": {"username": "u", "password": "p"},
+            },
+            result=None,
+            error=None,
+            retry_of=None,
+            created_by="admin",
+            created_at=datetime.now(timezone.utc),
+            started_at=None,
+            finished_at=None,
+        )
+
+        resp = client.get("/api/v1/tasks/task-1")
+        assert resp.status_code == 200
+        params = resp.json()["params"]
+        assert params["repo_url"] == "https://github.com/user/repo.git"
+        assert params["token"] == "***"
+        assert params["auth_token"] == "***"
+        assert params["auth"]["username"] == "u"
+        assert params["auth"]["password"] == "***"
+
     def test_retry_failed_task(self, client, fake_task_manager):
         fake_task_manager.records["task-1"] = TaskRecord(
             id="task-1",

@@ -108,7 +108,7 @@ class GitService:
 
                         events = sel.select(timeout=0.25)
                         if events:
-                            chunk = proc.stdout.read1(4096)
+                            chunk = proc.stdout.read(4096)
                             if not chunk:
                                 if proc.poll() is not None:
                                     break

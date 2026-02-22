@@ -92,6 +92,16 @@ export interface TaskResponse {
   task_id: string;
 }
 
+export interface RetryTaskResponse {
+  original_task_id: string;
+  new_task_id: string;
+}
+
+export interface DownloadTaskFileResult {
+  filename: string;
+  blob: Blob;
+}
+
 export interface GitClonePayload {
   repo_url: string;
   branch?: string;

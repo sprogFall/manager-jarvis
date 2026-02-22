@@ -457,9 +457,13 @@ def build_from_workspace(
 @router.delete("/git/workspace/{workspace_id}")
 def delete_workspace(
     workspace_id: str,
+    confirm: bool = Query(default=False),
+    x_confirm_action: str | None = Depends(confirmation_header),
     user: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ) -> dict:
+    check_confirmation(confirm, "remove-workspace", x_confirm_action)
+
     git_service = GitService()
     try:
         git_service.cleanup(workspace_id)

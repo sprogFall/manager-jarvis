@@ -135,13 +135,21 @@ class TestBuildFromWorkspaceEndpoint:
 
 
 class TestDeleteWorkspaceEndpoint:
+    def test_delete_workspace_requires_confirmation(self, client, runtime_paths):
+        ws_id = "d" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+
+        resp = client.delete(f"/api/v1/images/git/workspace/{ws_id}")
+        assert resp.status_code == 400
+
     def test_delete_workspace_removes_directory(self, client, runtime_paths):
         ws_id = "d" * 32
         ws_path: Path = runtime_paths["workspaces"] / ws_id
         ws_path.mkdir(parents=True, exist_ok=True)
         (ws_path / "Dockerfile").write_text("FROM alpine")
 
-        resp = client.delete(f"/api/v1/images/git/workspace/{ws_id}")
+        resp = client.delete(f"/api/v1/images/git/workspace/{ws_id}?confirm=true")
         assert resp.status_code == 200
         assert resp.json() == {"deleted": ws_id}
         assert not ws_path.exists()

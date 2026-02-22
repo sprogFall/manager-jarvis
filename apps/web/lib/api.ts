@@ -4,12 +4,14 @@ import type {
   ComposeSource,
   ContainerDetail,
   ContainerSummary,
+  DownloadTaskFileResult,
   GitClonePayload,
   ImageSummary,
   LoadFromUrlPayload,
   LoginPayload,
   PullImagePayload,
   ProxyConfig,
+  RetryTaskResponse,
   StackSummary,
   TaskRecord,
   TaskResponse,
@@ -26,6 +28,52 @@ import type {
 
 function trimSlash(value: string): string {
   return value.replace(/\/$/, '');
+}
+
+function extractErrorMessage(text: string): string {
+  const raw = (text ?? '').trim();
+  if (!raw) return '';
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as Record<string, unknown>;
+      if (typeof record.detail === 'string' && record.detail.trim()) {
+        return record.detail.trim();
+      }
+      if (record.detail && typeof record.detail === 'object') {
+        const detail = record.detail as Record<string, unknown>;
+        if (typeof detail.message === 'string' && detail.message.trim()) {
+          return detail.message.trim();
+        }
+        return JSON.stringify(record.detail);
+      }
+      if (typeof record.message === 'string' && record.message.trim()) {
+        return record.message.trim();
+      }
+    }
+  } catch {
+    // Ignore JSON parse failures; fall back to raw text.
+  }
+  return raw;
+}
+
+function filenameFromContentDisposition(value: string | null): string | null {
+  if (!value) return null;
+
+  const utf8Match = value.match(/filename\\*=UTF-8''([^;]+)/i);
+  if (utf8Match && utf8Match[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const match = value.match(/filename=\"?([^\";]+)\"?/i);
+  if (match && match[1]) {
+    return match[1];
+  }
+  return null;
 }
 
 export class ApiClient {
@@ -52,7 +100,8 @@ export class ApiClient {
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(text || `Request failed: ${response.status}`);
+      const message = extractErrorMessage(text);
+      throw new Error(message || `Request failed: ${response.status ?? ''}`);
     }
 
     if (response.status === 204) {
@@ -76,7 +125,8 @@ export class ApiClient {
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(text || `Request failed: ${response.status}`);
+      const message = extractErrorMessage(text);
+      throw new Error(message || `Request failed: ${response.status ?? ''}`);
     }
 
     return await response.text();
@@ -151,6 +201,36 @@ export class ApiClient {
 
   getTask(taskId: string): Promise<TaskRecord> {
     return this.request<TaskRecord>(`/api/v1/tasks/${encodeURIComponent(taskId)}`);
+  }
+
+  retryTask(taskId: string): Promise<RetryTaskResponse> {
+    return this.request<RetryTaskResponse>(`/api/v1/tasks/${encodeURIComponent(taskId)}/retry`, {
+      method: 'POST',
+    });
+  }
+
+  async downloadTaskFile(taskId: string): Promise<DownloadTaskFileResult> {
+    const headers = new Headers();
+    if (this.token) {
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+
+    const response = await fetch(`${this.baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/download`, {
+      method: 'GET',
+      headers,
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      const message = extractErrorMessage(text);
+      throw new Error(message || `Request failed: ${response.status ?? ''}`);
+    }
+
+    const blob = await response.blob();
+    const filename =
+      filenameFromContentDisposition(response.headers.get('content-disposition')) ?? `task-${taskId}`;
+    return { filename, blob };
   }
 
   getTaskLogs(taskId: string, tail = 200): Promise<string> {
@@ -238,7 +318,7 @@ export class ApiClient {
   }
 
   deleteWorkspace(workspaceId: string): Promise<void> {
-    return this.request<void>(`/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}`, {
+    return this.request<void>(`/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}?confirm=true`, {
       method: 'DELETE',
     });
   }

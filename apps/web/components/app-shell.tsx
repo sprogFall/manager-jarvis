@@ -218,6 +218,8 @@ const noClient = {
   runStackAction: async () => ({ task_id: 'task-demo' }),
   getTasks: async () => [],
   getTaskLogs: async () => '',
+  retryTask: async () => ({ original_task_id: 'task-demo', new_task_id: 'task-demo-2' }),
+  downloadTaskFile: async () => ({ filename: 'task-demo.txt', blob: new Blob(['demo']) }),
   getAuditLogs: async () => [],
   getProxyConfig: async () => ({ proxy_url: null }),
   updateProxyConfig: async () => ({ proxy_url: null }),
@@ -325,7 +327,15 @@ export function AppShell({ client, onLogout }: AppShellProps) {
       return <StackPanel loadStacks={() => api.getStacks()} runStackAction={(name, action) => api.runStackAction(name, action)} />;
     }
     if (section === 'tasks') {
-      return <TaskPanel loadTasks={() => api.getTasks()} getTask={(id) => api.getTask(id)} getTaskLogs={(id, tail) => api.getTaskLogs(id, tail)} />;
+      return (
+        <TaskPanel
+          loadTasks={() => api.getTasks()}
+          getTask={(id) => api.getTask(id)}
+          getTaskLogs={(id, tail) => api.getTaskLogs(id, tail)}
+          retryTask={(id) => api.retryTask(id)}
+          downloadTaskFile={(id) => api.downloadTaskFile(id)}
+        />
+      );
     }
     if (section === 'proxy') {
       return <ProxyPanel loadProxy={() => api.getProxyConfig()} updateProxy={(payload) => api.updateProxyConfig(payload)} />;

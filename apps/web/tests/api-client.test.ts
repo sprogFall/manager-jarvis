@@ -89,6 +89,59 @@ describe('ApiClient', () => {
     );
   });
 
+  it('deletes workspace with secondary confirmation', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+      text: async () => '',
+    });
+
+    const client = new ApiClient('http://localhost:8000', 'token-123');
+    await client.deleteWorkspace('a'.repeat(32));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `http://localhost:8000/api/v1/images/git/workspace/${'a'.repeat(32)}?confirm=true`,
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('retries failed task', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ original_task_id: 'task-1', new_task_id: 'task-2' }),
+      text: async () => '',
+    });
+
+    const client = new ApiClient('http://localhost:8000', 'token-123');
+    const result = await client.retryTask('task-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/tasks/task-1/retry',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(result.new_task_id).toBe('task-2');
+  });
+
+  it('downloads task file with bearer token', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-disposition': 'attachment; filename=\"logs.txt\"' }),
+      blob: async () => new Blob(['hello']),
+      text: async () => '',
+    });
+
+    const client = new ApiClient('http://localhost:8000', 'token-123');
+    const result = await client.downloadTaskFile('task-1');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('http://localhost:8000/api/v1/tasks/task-1/download');
+    const headers = new Headers(options.headers);
+    expect(headers.get('Authorization')).toBe('Bearer token-123');
+    expect(result.filename).toBe('logs.txt');
+  });
+
   it('requests and updates proxy config', async () => {
     fetchMock
       .mockResolvedValueOnce({
@@ -203,5 +256,16 @@ describe('ApiClient', () => {
 
     const client = new ApiClient('http://localhost:8000', 'token-123');
     await expect(client.getImages()).rejects.toThrow('bad request');
+  });
+
+  it('extracts FastAPI detail message on request failure', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: async () => JSON.stringify({ detail: 'Task not found' }),
+    });
+
+    const client = new ApiClient('http://localhost:8000', 'token-123');
+    await expect(client.getTask('missing')).rejects.toMatchObject({ message: 'Task not found' });
   });
 });

@@ -64,7 +64,7 @@ export function ProxyPanel({ loadProxy, updateProxy }: ProxyPanelProps) {
       <div className="panel-head">
         <div>
           <h2>代理设置</h2>
-          <p>配置后 GitHub/Gitee 拉取、仓库克隆和 URL 下载请求将统一走代理。</p>
+          <p>配置后 Git 克隆/同步，以及“从 URL 加载镜像”将通过代理发起请求（URL 下载仅支持 http/https 代理）。</p>
         </div>
         <button type="button" className="btn btn-ghost" onClick={() => void refresh()} disabled={loading || saving}>
           {loading ? '刷新中...' : '刷新'}
@@ -99,7 +99,9 @@ export function ProxyPanel({ loadProxy, updateProxy }: ProxyPanelProps) {
         </button>
       </form>
 
-      <p className="muted">支持协议：`http`、`https`、`socks5`、`socks5h`。留空后保存可关闭代理。</p>
+      <p className="muted">
+        支持协议：`http`、`https`、`socks5`、`socks5h`。注意：URL 下载暂不支持 socks5 代理（仅支持 http/https）；Git 操作可使用 socks5/socks5h。留空后保存可关闭代理。
+      </p>
     </section>
   );
 }
