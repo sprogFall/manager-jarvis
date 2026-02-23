@@ -291,6 +291,111 @@ class TestComposeProxyEnv:
         assert captured["env"] is not None
         assert captured["env"]["HTTP_PROXY"] == "http://my-proxy:7890"
 
+    def test_run_command_passes_cwd_to_subprocess(self, monkeypatch):
+        """_run_command 将 cwd 传递给 subprocess.run()"""
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cwd"] = kwargs.get("cwd")
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
+
+        service = StackService()
+        from pathlib import Path
+        service._run_command(["echo", "test"], cwd=Path("/tmp/mystack"))
+        assert captured["cwd"] == Path("/tmp/mystack")
+
+    def test_run_command_cwd_defaults_to_none(self, monkeypatch):
+        """_run_command 不传 cwd 时默认为 None"""
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cwd"] = kwargs.get("cwd")
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
+
+        service = StackService()
+        service._run_command(["echo", "test"])
+        assert captured["cwd"] is None
+
+    def test_run_command_stream_passes_cwd_to_popen(self, monkeypatch):
+        """_run_command_stream 将 cwd 传递给 subprocess.Popen()"""
+        captured = {}
+
+        class FakeProc:
+            def __init__(self, cwd):
+                captured["cwd"] = cwd
+                read_fd, write_fd = os.pipe()
+                os.write(write_fd, b"done\n")
+                os.close(write_fd)
+                self.stdout = os.fdopen(read_fd, "rb")
+                self.returncode = 0
+
+            def poll(self):
+                return 0
+
+            def wait(self):
+                return 0
+
+        def fake_popen(cmd, **kwargs):
+            return FakeProc(kwargs.get("cwd"))
+
+        monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+        service = StackService()
+        from pathlib import Path
+        service._run_command_stream(["echo", "test"], log_writer=lambda x: None, cwd=Path("/tmp/mystack"))
+        assert captured["cwd"] == Path("/tmp/mystack")
+
+    def test_run_compose_action_passes_project_directory_as_cwd(self, monkeypatch):
+        """run_compose_action 将 project_directory 作为 cwd 传递"""
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cwd"] = kwargs.get("cwd")
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
+
+        service = StackService()
+        from pathlib import Path
+        proj_dir = Path("/tmp/workspace")
+        service.run_compose_action(
+            project_name="test",
+            compose_file=Path("/tmp/workspace/compose.yaml"),
+            action="up",
+            project_directory=proj_dir,
+        )
+        assert captured["cwd"] == proj_dir.resolve()
+
+    def test_run_action_passes_compose_parent_as_cwd(self, monkeypatch):
+        """run_action 将 compose_file 所在目录作为 cwd 传递"""
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cwd"] = kwargs.get("cwd")
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
+
+        from pathlib import Path
+        compose_path = Path("/tmp/demo/compose.yaml")
+        monkeypatch.setattr(
+            StackService,
+            "_resolve_stack",
+            lambda self, name: stack_module.StackInfo(
+                name=name,
+                path=compose_path.parent,
+                compose_file=compose_path,
+            ),
+        )
+
+        service = StackService()
+        service.run_action("demo", "up")
+        assert captured["cwd"] == compose_path.parent
+
     def test_task_stack_action_injects_proxy(self, monkeypatch):
         captured = {}
 

@@ -94,7 +94,8 @@ class StackService:
         stack = self._resolve_stack(name)
         base_cmd = ["docker", "compose", "-f", str(stack.compose_file), "-p", name]
         cmd = self._build_action_command(base_cmd, action, force_recreate)
-        result = self._run_command_stream(cmd, log_writer=log_writer, env=env) if log_writer else self._run_command(cmd, env=env)
+        cwd = stack.compose_file.parent
+        result = self._run_command_stream(cmd, log_writer=log_writer, env=env, cwd=cwd) if log_writer else self._run_command(cmd, env=env, cwd=cwd)
         return {"stack": name, "action": action, **result}
 
     def run_compose_action(
@@ -116,7 +117,8 @@ class StackService:
         if project_directory:
             base_cmd.extend(["--project-directory", str(project_directory.resolve())])
         cmd = self._build_action_command(base_cmd, action, force_recreate)
-        result = self._run_command_stream(cmd, log_writer=log_writer, env=env) if log_writer else self._run_command(cmd, env=env)
+        cwd = project_directory.resolve() if project_directory else None
+        result = self._run_command_stream(cmd, log_writer=log_writer, env=env, cwd=cwd) if log_writer else self._run_command(cmd, env=env, cwd=cwd)
         return {
             "stack": project_name,
             "action": action,
@@ -234,7 +236,7 @@ class StackService:
         except (json.JSONDecodeError, KeyError):
             return []
 
-    def _run_command(self, cmd: list[str], raise_on_error: bool = True, timeout: int = 60 * 20, env: dict[str, str] | None = None) -> dict[str, Any]:
+    def _run_command(self, cmd: list[str], raise_on_error: bool = True, timeout: int = 60 * 20, env: dict[str, str] | None = None, cwd: Path | None = None) -> dict[str, Any]:
         logger.debug("exec: %s", " ".join(cmd))
         try:
             proc = subprocess.run(
@@ -244,6 +246,7 @@ class StackService:
                 check=False,
                 timeout=timeout,
                 env=env,
+                cwd=cwd,
             )
         except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
             result = {
@@ -281,6 +284,7 @@ class StackService:
         raise_on_error: bool = True,
         timeout: int = 60 * 20,
         env: dict[str, str] | None = None,
+        cwd: Path | None = None,
     ) -> dict[str, Any]:
         logger.debug("exec(stream): %s", " ".join(cmd))
         started = time.monotonic()
@@ -306,6 +310,7 @@ class StackService:
                 stderr=subprocess.STDOUT,
                 text=False,
                 env=env,
+                cwd=cwd,
             )
         except OSError as exc:
             result = {"exit_code": -1, "stdout": "", "stderr": str(exc), "command": " ".join(cmd)}
