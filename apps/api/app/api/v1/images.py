@@ -353,6 +353,7 @@ def run_workspace_compose_action(
 
     compose_path = target["compose_path"]
     project_name = payload.project_name or service.suggest_project_name(workspace_id, compose_path)
+    env_files = service.find_workspace_env_files(workspace_id)
     task_id = get_task_manager().enqueue(
         db,
         task_type="image.git.compose.action",
@@ -365,6 +366,7 @@ def run_workspace_compose_action(
             "project_name": project_name,
             "action": action,
             "force_recreate": payload.force_recreate,
+            "env_files": env_files,
         },
         created_by=user.username,
         resource_type="stack",

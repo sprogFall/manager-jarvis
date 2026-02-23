@@ -496,7 +496,8 @@ class TestGitServiceUnit:
         ws_path: Path = runtime_paths["workspaces"] / ws_id
         ws_path.mkdir(parents=True, exist_ok=True)
         (ws_path / ".env.example").write_text("KEY=val\n")
-        target = ws_path / ".env"
+        target = ws_path / ".jarvis" / "env" / ".env"
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("KEY=custom\n")
         assert target.exists()
 
@@ -634,6 +635,84 @@ class TestBuildServicesExtraction:
         assert "myapp:v2" in custom_resp.json()["content"]
 
 
+class TestFindWorkspaceEnvFiles:
+    def test_find_env_files_returns_existing_targets(self, runtime_paths):
+        ws_id = "a" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("KEY=val\n")
+        # 写入 .jarvis/env/.env（存储路径）
+        env_storage = ws_path / ".jarvis" / "env" / ".env"
+        env_storage.parent.mkdir(parents=True, exist_ok=True)
+        env_storage.write_text("KEY=custom\n")
+        (ws_path / "backend").mkdir()
+        (ws_path / "backend" / ".env.sample").write_text("DB=x\n")
+        # backend/.env does NOT exist → should not be returned
+
+        service = GitService()
+        result = service.find_workspace_env_files(ws_id)
+        assert len(result) == 1
+        assert result[0] == str(env_storage.resolve())
+
+    def test_find_env_files_returns_empty_when_no_custom(self, runtime_paths):
+        ws_id = "b" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("KEY=val\n")
+        # no .env written
+
+        service = GitService()
+        result = service.find_workspace_env_files(ws_id)
+        assert result == []
+
+    def test_find_env_files_returns_empty_when_no_templates(self, runtime_paths):
+        ws_id = "c" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+
+        service = GitService()
+        result = service.find_workspace_env_files(ws_id)
+        assert result == []
+
+
+class TestComposeActionEnvFiles:
+    def test_compose_action_params_include_env_files(self, client, fake_task_manager, runtime_paths):
+        ws_id = "d" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("KEY=val\n")
+        env_storage = ws_path / ".jarvis" / "env" / ".env"
+        env_storage.parent.mkdir(parents=True, exist_ok=True)
+        env_storage.write_text("KEY=custom\n")
+        (ws_path / "compose.yaml").write_text("services:\n  web:\n    image: nginx\n")
+
+        resp = client.post(
+            f"/api/v1/images/git/workspace/{ws_id}/compose/up",
+            json={"compose_path": "compose.yaml", "source": "repository"},
+        )
+        assert resp.status_code == 200
+        task_id = resp.json()["task_id"]
+        rec = fake_task_manager.records[task_id]
+        assert "env_files" in rec.params
+        assert len(rec.params["env_files"]) == 1
+        assert rec.params["env_files"][0] == str(env_storage.resolve())
+
+    def test_compose_action_params_empty_env_files_when_none(self, client, fake_task_manager, runtime_paths):
+        ws_id = "e" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / "compose.yaml").write_text("services:\n  web:\n    image: nginx\n")
+
+        resp = client.post(
+            f"/api/v1/images/git/workspace/{ws_id}/compose/up",
+            json={"compose_path": "compose.yaml", "source": "repository"},
+        )
+        assert resp.status_code == 200
+        task_id = resp.json()["task_id"]
+        rec = fake_task_manager.records[task_id]
+        assert rec.params["env_files"] == []
+
+
 class TestWorkspaceEnvEndpoint:
     def test_discover_multiple_env_templates(self, client, runtime_paths):
         ws_id = "a" * 32
@@ -689,7 +768,9 @@ class TestWorkspaceEnvEndpoint:
         ws_path: Path = runtime_paths["workspaces"] / ws_id
         ws_path.mkdir(parents=True, exist_ok=True)
         (ws_path / ".env.example").write_text("KEY=val\n")
-        (ws_path / ".env").write_text("KEY=custom\n")
+        target = ws_path / ".jarvis" / "env" / ".env"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("KEY=custom\n")
 
         resp = client.delete(
             f"/api/v1/images/git/workspace/{ws_id}/env",
@@ -697,7 +778,7 @@ class TestWorkspaceEnvEndpoint:
         )
         assert resp.status_code == 200
         assert resp.json()["deleted"] is True
-        assert not (ws_path / ".env").exists()
+        assert not target.exists()
 
     def test_comment_association(self, client, runtime_paths):
         ws_id = "e" * 32

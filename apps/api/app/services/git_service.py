@@ -532,6 +532,16 @@ class GitService:
     def _sort_workspace_paths(self, paths: list[str] | set[str]) -> list[str]:
         return sorted(set(paths), key=lambda item: (item.count("/"), item))
 
+    def find_workspace_env_files(self, workspace_id: str) -> list[str]:
+        workspace_path = self.get_workspace_path(workspace_id)
+        templates = self.discover_env_templates(workspace_id)
+        result: list[str] = []
+        for tpl in templates:
+            target = self._env_storage_file(workspace_path, tpl)
+            if target.exists() and target.is_file():
+                result.append(str(target.resolve()))
+        return result
+
     def discover_env_templates(self, workspace_id: str) -> list[str]:
         workspace_path = self.get_workspace_path(workspace_id)
         matches: set[str] = set()
@@ -554,6 +564,14 @@ class GitService:
         p = Path(template_path)
         stem = p.stem  # ".env" from ".env.example"
         return (p.parent / stem).as_posix() if p.parent != Path(".") else stem
+
+    @staticmethod
+    def _env_storage_file(workspace_path: Path, template_path: str) -> Path:
+        """Return the actual storage path under .jarvis/env/ for a given template."""
+        p = Path(template_path)
+        stem = p.stem  # ".env" from ".env.example"
+        rel = (p.parent / stem).as_posix() if p.parent != Path(".") else stem
+        return workspace_path / ".jarvis" / "env" / rel
 
     @staticmethod
     def _parse_env_content(content: str) -> list[dict]:
@@ -606,7 +624,7 @@ class GitService:
         template_variables = self._parse_env_content(template_content)
 
         target_rel = self._env_target_path(template_path)
-        target_file = self._resolve_file(workspace_path, target_rel, "target_path")
+        target_file = self._env_storage_file(workspace_path, template_path)
         custom_exists = target_file.exists() and target_file.is_file()
         custom_content = ""
         custom_variables: list[dict] = []
@@ -628,7 +646,7 @@ class GitService:
         workspace_path = self.get_workspace_path(workspace_id)
         self._resolve_file(workspace_path, template_path, "template_path")
         target_rel = self._env_target_path(template_path)
-        target_file = self._resolve_file(workspace_path, target_rel, "target_path")
+        target_file = self._env_storage_file(workspace_path, template_path)
         target_file.parent.mkdir(parents=True, exist_ok=True)
         target_file.write_text(content, encoding="utf-8")
         return {
@@ -641,7 +659,7 @@ class GitService:
         workspace_path = self.get_workspace_path(workspace_id)
         self._resolve_file(workspace_path, template_path, "template_path")
         target_rel = self._env_target_path(template_path)
-        target_file = self._resolve_file(workspace_path, target_rel, "target_path")
+        target_file = self._env_storage_file(workspace_path, template_path)
         existed = target_file.exists()
         target_file.unlink(missing_ok=True)
         return {

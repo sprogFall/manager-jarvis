@@ -396,6 +396,77 @@ class TestComposeProxyEnv:
         service.run_action("demo", "up")
         assert captured["cwd"] == compose_path.parent
 
+    def test_run_compose_action_adds_env_file_flags(self, monkeypatch):
+        """run_compose_action 将 env_files 转为 --env-file 命令参数"""
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
+
+        service = StackService()
+        from pathlib import Path
+        service.run_compose_action(
+            project_name="test",
+            compose_file=Path("/tmp/workspace/deploy/compose.yaml"),
+            action="up",
+            project_directory=Path("/tmp/workspace/deploy"),
+            env_files=["/tmp/workspace/.env", "/tmp/workspace/backend/.env"],
+        )
+        cmd = captured["cmd"]
+        # --env-file should appear before the action subcommand
+        assert "--env-file" in cmd
+        idx1 = cmd.index("--env-file")
+        assert cmd[idx1 + 1] == "/tmp/workspace/.env"
+        idx2 = cmd.index("--env-file", idx1 + 2)
+        assert cmd[idx2 + 1] == "/tmp/workspace/backend/.env"
+
+    def test_run_compose_action_no_env_file_when_empty(self, monkeypatch):
+        """env_files 为空列表时不添加 --env-file"""
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
+
+        service = StackService()
+        from pathlib import Path
+        service.run_compose_action(
+            project_name="test",
+            compose_file=Path("/tmp/workspace/compose.yaml"),
+            action="up",
+            env_files=[],
+        )
+        assert "--env-file" not in captured["cmd"]
+
+    def test_task_workspace_compose_action_passes_env_files(self, monkeypatch):
+        """task_workspace_compose_action 将 env_files 传递给 run_compose_action"""
+        captured = {}
+
+        def fake_run_compose_action(self, **kwargs):
+            captured["env_files"] = kwargs.get("env_files")
+            return {"stack": "test", "action": "up", "exit_code": 0, "stdout": "", "stderr": "", "command": ""}
+
+        monkeypatch.setattr(StackService, "run_compose_action", fake_run_compose_action)
+
+        with patch("app.services.proxy_service.get_runtime_proxy_url", return_value=None):
+            from app.services.task_service import task_workspace_compose_action
+
+            task_workspace_compose_action({
+                "compose_file": "/tmp/compose.yaml",
+                "project_directory": "/tmp",
+                "project_name": "test",
+                "action": "up",
+                "force_recreate": False,
+                "env_files": ["/tmp/.env"],
+            })
+
+        assert captured["env_files"] == ["/tmp/.env"]
+
     def test_task_stack_action_injects_proxy(self, monkeypatch):
         captured = {}
 

@@ -108,6 +108,7 @@ class StackService:
         project_directory: Path | None = None,
         log_writer: Callable[[str], None] | None = None,
         env: dict[str, str] | None = None,
+        env_files: list[str] | None = None,
     ) -> dict[str, Any]:
         if not STACK_NAME_RE.match(project_name):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid stack name")
@@ -116,6 +117,8 @@ class StackService:
         base_cmd = ["docker", "compose", "-f", str(compose_path), "-p", project_name]
         if project_directory:
             base_cmd.extend(["--project-directory", str(project_directory.resolve())])
+        for ef in env_files or []:
+            base_cmd.extend(["--env-file", ef])
         cmd = self._build_action_command(base_cmd, action, force_recreate)
         cwd = project_directory.resolve() if project_directory else None
         result = self._run_command_stream(cmd, log_writer=log_writer, env=env, cwd=cwd) if log_writer else self._run_command(cmd, env=env, cwd=cwd)

@@ -397,6 +397,7 @@ def task_workspace_compose_action(params: dict[str, Any]) -> dict[str, Any]:
         project_directory=project_directory,
         log_writer=log_writer,
         env=env,
+        env_files=params.get("env_files"),
     )
 
 
