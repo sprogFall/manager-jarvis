@@ -389,7 +389,7 @@ class StackService:
                 cmd.append("--force-recreate")
             return cmd
         if action == "down":
-            return base_cmd + ["down"]
+            return base_cmd + ["down", "--remove-orphans"]
         if action == "restart":
             return base_cmd + ["restart"]
         if action == "pull":

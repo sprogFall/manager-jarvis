@@ -467,6 +467,84 @@ class TestComposeProxyEnv:
 
         assert captured["env_files"] == ["/tmp/.env"]
 
+    def test_task_workspace_compose_action_injects_env_vars_into_env(self, monkeypatch, tmp_path):
+        """task_workspace_compose_action 将 .env 文件中的变量注入到 subprocess env"""
+        env_file = tmp_path / ".env"
+        env_file.write_text("DB_HOST=mydb\nDB_PORT=5432\n", encoding="utf-8")
+
+        captured = {}
+
+        def fake_run_compose_action(self, **kwargs):
+            captured["env"] = kwargs.get("env")
+            return {"stack": "test", "action": "up", "exit_code": 0, "stdout": "", "stderr": "", "command": ""}
+
+        monkeypatch.setattr(StackService, "run_compose_action", fake_run_compose_action)
+
+        with patch("app.services.proxy_service.get_runtime_proxy_url", return_value=None):
+            from app.services.task_service import task_workspace_compose_action
+
+            task_workspace_compose_action({
+                "compose_file": "/tmp/compose.yaml",
+                "project_directory": "/tmp",
+                "project_name": "test",
+                "action": "up",
+                "force_recreate": False,
+                "env_files": [str(env_file)],
+            })
+
+        assert captured["env"] is not None
+        assert captured["env"]["DB_HOST"] == "mydb"
+        assert captured["env"]["DB_PORT"] == "5432"
+
+    def test_task_workspace_compose_action_env_without_proxy(self, monkeypatch, tmp_path):
+        """无代理时也注入 env 文件变量到 subprocess env"""
+        env_file = tmp_path / ".env"
+        env_file.write_text("APP_KEY=secret\n", encoding="utf-8")
+
+        captured = {}
+
+        def fake_run_compose_action(self, **kwargs):
+            captured["env"] = kwargs.get("env")
+            return {"stack": "test", "action": "down", "exit_code": 0, "stdout": "", "stderr": "", "command": ""}
+
+        monkeypatch.setattr(StackService, "run_compose_action", fake_run_compose_action)
+
+        with patch("app.services.proxy_service.get_runtime_proxy_url", return_value=None):
+            from app.services.task_service import task_workspace_compose_action
+
+            task_workspace_compose_action({
+                "compose_file": "/tmp/compose.yaml",
+                "project_directory": "/tmp",
+                "project_name": "test",
+                "action": "down",
+                "force_recreate": False,
+                "env_files": [str(env_file)],
+            })
+
+        assert captured["env"] is not None
+        assert captured["env"]["APP_KEY"] == "secret"
+        # 也应包含 PATH 等系统变量
+        assert "PATH" in captured["env"]
+
+    def test_down_command_includes_remove_orphans(self, monkeypatch):
+        """compose down 命令包含 --remove-orphans"""
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
+
+        service = StackService()
+        from pathlib import Path
+        service.run_compose_action(
+            project_name="test",
+            compose_file=Path("/tmp/compose.yaml"),
+            action="down",
+        )
+        assert "--remove-orphans" in captured["cmd"]
+
     def test_task_stack_action_injects_proxy(self, monkeypatch):
         captured = {}
 

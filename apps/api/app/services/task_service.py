@@ -381,14 +381,26 @@ def task_load_image_from_url(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def task_workspace_compose_action(params: dict[str, Any]) -> dict[str, Any]:
+    from app.services.git_service import GitService
     from app.services.proxy_service import build_proxy_env, get_runtime_proxy_url
 
     service = StackService()
     log_writer = _make_task_log_writer(params.get("_task_id") if isinstance(params.get("_task_id"), str) else None)
     compose_file = Path(params["compose_file"])
     project_directory = Path(params["project_directory"]) if params.get("project_directory") else None
+
+    # 将 .env 文件变量注入 subprocess 环境，确保 compose 变量插值生效
+    base_env = dict(os.environ)
+    for ef_path in params.get("env_files") or []:
+        try:
+            content = Path(ef_path).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for var in GitService._parse_env_content(content):
+            base_env[var["key"]] = var["value"]
+
     proxy_url = get_runtime_proxy_url()
-    env = build_proxy_env({**os.environ}, proxy_url) if proxy_url else None
+    env = build_proxy_env(base_env, proxy_url) if proxy_url else base_env
     return service.run_compose_action(
         project_name=params["project_name"],
         compose_file=compose_file,
