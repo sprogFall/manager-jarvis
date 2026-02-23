@@ -182,3 +182,26 @@ export interface ProxyConfig {
 export interface UpdateProxyPayload {
   proxy_url: string | null;
 }
+
+export interface EnvVariable {
+  key: string;
+  value: string;
+  comment: string;
+}
+
+export interface WorkspaceEnvInfo {
+  workspace_id: string;
+  env_templates: string[];
+  selected_template: string | null;
+  target_path: string | null;
+  custom_exists: boolean;
+  template_content: string;
+  template_variables: EnvVariable[];
+  custom_content: string;
+  custom_variables: EnvVariable[];
+}
+
+export interface WorkspaceEnvUpdatePayload {
+  template_path: string;
+  content: string;
+}

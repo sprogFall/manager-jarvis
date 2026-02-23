@@ -21,6 +21,7 @@ from app.schemas.image import (
     WorkspaceComposeActionRequest,
     WorkspaceComposeInfo,
     WorkspaceComposeUpdateRequest,
+    WorkspaceEnvUpdateRequest,
     WorkspaceInfo,
     WorkspaceSummary,
 )
@@ -452,6 +453,98 @@ def build_from_workspace(
         detail={"task_id": task_id, "workspace_id": workspace_id},
     )
     return {"task_id": task_id}
+
+
+@router.get("/git/workspace/{workspace_id}/env")
+def get_workspace_env(
+    workspace_id: str,
+    template_path: str | None = Query(default=None),
+    _: User = Depends(get_current_admin),
+) -> dict:
+    service = GitService()
+    try:
+        env_templates = service.discover_env_templates(workspace_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    selected = template_path if template_path and template_path in env_templates else (env_templates[0] if env_templates else None)
+
+    if selected is None:
+        return {
+            "workspace_id": workspace_id,
+            "env_templates": [],
+            "selected_template": None,
+            "target_path": None,
+            "custom_exists": False,
+            "template_content": "",
+            "template_variables": [],
+            "custom_content": "",
+            "custom_variables": [],
+        }
+
+    try:
+        info = service.read_env_template(workspace_id, selected)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return {
+        "workspace_id": workspace_id,
+        "env_templates": env_templates,
+        "selected_template": selected,
+        **info,
+    }
+
+
+@router.put("/git/workspace/{workspace_id}/env")
+def update_workspace_env(
+    workspace_id: str,
+    payload: WorkspaceEnvUpdateRequest,
+    user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    service = GitService()
+    try:
+        result = service.save_env_file(workspace_id, payload.template_path, payload.content)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    write_audit_log(
+        db,
+        action="image.git.env.update",
+        resource_type="image",
+        resource_id=workspace_id,
+        user=user,
+        detail={"template_path": payload.template_path},
+    )
+    return result
+
+
+@router.delete("/git/workspace/{workspace_id}/env")
+def clear_workspace_env(
+    workspace_id: str,
+    template_path: str = Query(),
+    user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    service = GitService()
+    try:
+        result = service.clear_env_file(workspace_id, template_path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    write_audit_log(
+        db,
+        action="image.git.env.clear",
+        resource_type="image",
+        resource_id=workspace_id,
+        user=user,
+        detail={"template_path": template_path, "deleted": result["deleted"]},
+    )
+    return result
 
 
 @router.delete("/git/workspace/{workspace_id}")

@@ -213,6 +213,19 @@ const noClient = {
   syncWorkspace: async () => ({ task_id: 'task-demo' }),
   buildFromWorkspace: async () => ({ task_id: 'task-demo' }),
   deleteWorkspace: async () => undefined,
+  getWorkspaceEnv: async () => ({
+    workspace_id: '',
+    env_templates: [],
+    selected_template: null,
+    target_path: null,
+    custom_exists: false,
+    template_content: '',
+    template_variables: [],
+    custom_content: '',
+    custom_variables: [],
+  }),
+  saveWorkspaceEnv: async () => ({ workspace_id: '', template_path: '', target_path: '' }),
+  clearWorkspaceEnv: async () => ({ deleted: false }),
   loadFromUrl: async () => ({ task_id: 'task-demo' }),
   getStacks: async () => [],
   runStackAction: async () => ({ task_id: 'task-demo' }),
@@ -320,6 +333,9 @@ export function AppShell({ client, onLogout }: AppShellProps) {
           syncWorkspace={(id) => api.syncWorkspace(id)}
           buildFromWorkspace={(id, payload) => api.buildFromWorkspace(id, payload)}
           deleteWorkspace={(id) => api.deleteWorkspace(id)}
+          getWorkspaceEnv={(id, templatePath) => api.getWorkspaceEnv(id, templatePath)}
+          saveWorkspaceEnv={(id, payload) => api.saveWorkspaceEnv(id, payload)}
+          clearWorkspaceEnv={(id, templatePath) => api.clearWorkspaceEnv(id, templatePath)}
         />
       );
     }

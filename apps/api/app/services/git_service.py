@@ -20,6 +20,7 @@ from app.services.proxy_service import build_proxy_env
 settings = get_settings()
 COMPOSE_FILE_SUFFIXES = {".yaml", ".yml"}
 IGNORED_WORKSPACE_DIRS = {".git", ".jarvis"}
+ENV_TEMPLATE_SUFFIXES = (".example", ".sample", ".template")
 PROJECT_NAME_SAFE_RE = re.compile(r"[^a-z0-9_-]+")
 GIT_MISSING_MESSAGE = "git command not found in runtime image"
 
@@ -471,6 +472,125 @@ class GitService:
 
     def _sort_workspace_paths(self, paths: list[str] | set[str]) -> list[str]:
         return sorted(set(paths), key=lambda item: (item.count("/"), item))
+
+    def discover_env_templates(self, workspace_id: str) -> list[str]:
+        workspace_path = self.get_workspace_path(workspace_id)
+        matches: set[str] = set()
+        for file_path in workspace_path.rglob("*"):
+            if not file_path.is_file():
+                continue
+            rel = file_path.relative_to(workspace_path)
+            if any(part in IGNORED_WORKSPACE_DIRS for part in rel.parts):
+                continue
+            name = file_path.name
+            if not name.startswith(".env."):
+                continue
+            suffix = name[len(".env") :]  # e.g. ".example"
+            if suffix in ENV_TEMPLATE_SUFFIXES:
+                matches.add(rel.as_posix())
+        return self._sort_workspace_paths(matches)
+
+    @staticmethod
+    def _env_target_path(template_path: str) -> str:
+        p = Path(template_path)
+        stem = p.stem  # ".env" from ".env.example"
+        return (p.parent / stem).as_posix() if p.parent != Path(".") else stem
+
+    @staticmethod
+    def _parse_env_content(content: str) -> list[dict]:
+        result: list[dict] = []
+        comment_lines: list[str] = []
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                comment_lines.clear()
+                continue
+            if stripped.startswith("#"):
+                comment_lines.append(stripped.lstrip("# "))
+                continue
+            if "=" not in stripped:
+                continue
+            key, _, value = stripped.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            result.append({
+                "key": key,
+                "value": value,
+                "comment": "\n".join(comment_lines),
+            })
+            comment_lines.clear()
+        return result
+
+    def _resolve_file(self, workspace_path: Path, relative_path: str, param_name: str = "path") -> Path:
+        clean = (relative_path or "").strip()
+        if not clean:
+            raise ValueError(f"{param_name} is required")
+        path = Path(clean)
+        if path.is_absolute():
+            raise ValueError(f"{param_name} must be relative path")
+        target = (workspace_path / path).resolve()
+        if workspace_path not in target.parents and target != workspace_path:
+            raise ValueError(f"{param_name} escapes workspace")
+        rel = target.relative_to(workspace_path)
+        if any(part in IGNORED_WORKSPACE_DIRS for part in rel.parts):
+            raise ValueError(f"{param_name} points to reserved directory")
+        return target
+
+    def read_env_template(self, workspace_id: str, template_path: str) -> dict:
+        workspace_path = self.get_workspace_path(workspace_id)
+        template_file = self._resolve_file(workspace_path, template_path, "template_path")
+        if not template_file.exists() or not template_file.is_file():
+            raise FileNotFoundError(f"Template not found: {template_path}")
+        template_content = template_file.read_text(encoding="utf-8")
+        template_variables = self._parse_env_content(template_content)
+
+        target_rel = self._env_target_path(template_path)
+        target_file = self._resolve_file(workspace_path, target_rel, "target_path")
+        custom_exists = target_file.exists() and target_file.is_file()
+        custom_content = ""
+        custom_variables: list[dict] = []
+        if custom_exists:
+            custom_content = target_file.read_text(encoding="utf-8")
+            custom_variables = self._parse_env_content(custom_content)
+
+        return {
+            "template_path": template_path,
+            "target_path": target_rel,
+            "custom_exists": custom_exists,
+            "template_content": template_content,
+            "template_variables": template_variables,
+            "custom_content": custom_content,
+            "custom_variables": custom_variables,
+        }
+
+    def save_env_file(self, workspace_id: str, template_path: str, content: str) -> dict:
+        workspace_path = self.get_workspace_path(workspace_id)
+        self._resolve_file(workspace_path, template_path, "template_path")
+        target_rel = self._env_target_path(template_path)
+        target_file = self._resolve_file(workspace_path, target_rel, "target_path")
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        target_file.write_text(content, encoding="utf-8")
+        return {
+            "workspace_id": workspace_id,
+            "template_path": template_path,
+            "target_path": target_rel,
+        }
+
+    def clear_env_file(self, workspace_id: str, template_path: str) -> dict:
+        workspace_path = self.get_workspace_path(workspace_id)
+        self._resolve_file(workspace_path, template_path, "template_path")
+        target_rel = self._env_target_path(template_path)
+        target_file = self._resolve_file(workspace_path, target_rel, "target_path")
+        existed = target_file.exists()
+        target_file.unlink(missing_ok=True)
+        return {
+            "workspace_id": workspace_id,
+            "template_path": template_path,
+            "target_path": target_rel,
+            "deleted": existed,
+        }
 
 
 def _validate_workspace_id(workspace_id: str) -> None:

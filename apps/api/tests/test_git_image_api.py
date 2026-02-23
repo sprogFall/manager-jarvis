@@ -414,3 +414,200 @@ class TestGitServiceUnit:
         service = GitService()
         with _pytest.raises(RuntimeError, match="git command not found"):
             service.sync_workspace(ws_id)
+
+    def test_parse_env_content_basic(self):
+        content = "# DB config\nDB_HOST=localhost\nDB_PORT=5432\n"
+        result = GitService._parse_env_content(content)
+        assert len(result) == 2
+        assert result[0] == {"key": "DB_HOST", "value": "localhost", "comment": "DB config"}
+        assert result[1] == {"key": "DB_PORT", "value": "5432", "comment": ""}
+
+    def test_parse_env_content_empty(self):
+        result = GitService._parse_env_content("")
+        assert result == []
+
+    def test_parse_env_content_strips_quotes(self):
+        content = 'KEY1="hello world"\nKEY2=\'single\'\n'
+        result = GitService._parse_env_content(content)
+        assert result[0]["value"] == "hello world"
+        assert result[1]["value"] == "single"
+
+    def test_parse_env_content_multiline_comments(self):
+        content = "# Section A\n# more detail\nFOO=bar\n"
+        result = GitService._parse_env_content(content)
+        assert len(result) == 1
+        assert result[0]["comment"] == "Section A\nmore detail"
+
+    def test_parse_env_content_blank_lines_reset_comment(self):
+        content = "# old comment\n\nKEY=val\n"
+        result = GitService._parse_env_content(content)
+        assert result[0]["comment"] == ""
+
+    def test_env_target_path_example(self):
+        assert GitService._env_target_path(".env.example") == ".env"
+
+    def test_env_target_path_sample(self):
+        assert GitService._env_target_path("backend/.env.sample") == "backend/.env"
+
+    def test_env_target_path_template(self):
+        assert GitService._env_target_path(".env.template") == ".env"
+
+    def test_discover_env_templates(self, runtime_paths):
+        ws_id = "e" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("KEY=val\n")
+        (ws_path / "backend").mkdir()
+        (ws_path / "backend" / ".env.sample").write_text("DB=x\n")
+        (ws_path / ".git").mkdir()
+        (ws_path / ".git" / ".env.example").write_text("ignored\n")
+
+        service = GitService()
+        templates = service.discover_env_templates(ws_id)
+        assert ".env.example" in templates
+        assert "backend/.env.sample" in templates
+        assert ".git/.env.example" not in templates
+
+    def test_read_env_template_returns_parsed_variables(self, runtime_paths):
+        ws_id = "e" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("# Server\nHOST=localhost\nPORT=8080\n")
+
+        service = GitService()
+        info = service.read_env_template(ws_id, ".env.example")
+        assert info["template_variables"][0]["key"] == "HOST"
+        assert info["custom_exists"] is False
+
+    def test_save_and_read_env_file(self, runtime_paths):
+        ws_id = "e" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("KEY=default\n")
+
+        service = GitService()
+        service.save_env_file(ws_id, ".env.example", "KEY=custom\n")
+        info = service.read_env_template(ws_id, ".env.example")
+        assert info["custom_exists"] is True
+        assert info["custom_variables"][0]["value"] == "custom"
+
+    def test_clear_env_file(self, runtime_paths):
+        ws_id = "e" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("KEY=val\n")
+        target = ws_path / ".env"
+        target.write_text("KEY=custom\n")
+        assert target.exists()
+
+        service = GitService()
+        result = service.clear_env_file(ws_id, ".env.example")
+        assert result["deleted"] is True
+        assert not target.exists()
+
+
+class TestWorkspaceEnvEndpoint:
+    def test_discover_multiple_env_templates(self, client, runtime_paths):
+        ws_id = "a" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("# DB\nDB_HOST=localhost\n")
+        (ws_path / "backend").mkdir()
+        (ws_path / "backend" / ".env.sample").write_text("API_KEY=xxx\n")
+
+        resp = client.get(f"/api/v1/images/git/workspace/{ws_id}/env")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert ".env.example" in body["env_templates"]
+        assert "backend/.env.sample" in body["env_templates"]
+        assert body["selected_template"] == ".env.example"
+        assert body["target_path"] == ".env"
+        assert body["template_variables"][0]["key"] == "DB_HOST"
+
+    def test_no_templates_returns_empty(self, client, runtime_paths):
+        ws_id = "b" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+
+        resp = client.get(f"/api/v1/images/git/workspace/{ws_id}/env")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["env_templates"] == []
+        assert body["selected_template"] is None
+
+    def test_save_then_read_custom(self, client, runtime_paths):
+        ws_id = "c" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("KEY=default\n")
+
+        save_resp = client.put(
+            f"/api/v1/images/git/workspace/{ws_id}/env",
+            json={"template_path": ".env.example", "content": "KEY=custom\n"},
+        )
+        assert save_resp.status_code == 200
+
+        get_resp = client.get(
+            f"/api/v1/images/git/workspace/{ws_id}/env",
+            params={"template_path": ".env.example"},
+        )
+        assert get_resp.status_code == 200
+        body = get_resp.json()
+        assert body["custom_exists"] is True
+        assert body["custom_variables"][0]["value"] == "custom"
+
+    def test_delete_env_file(self, client, runtime_paths):
+        ws_id = "d" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("KEY=val\n")
+        (ws_path / ".env").write_text("KEY=custom\n")
+
+        resp = client.delete(
+            f"/api/v1/images/git/workspace/{ws_id}/env",
+            params={"template_path": ".env.example"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] is True
+        assert not (ws_path / ".env").exists()
+
+    def test_comment_association(self, client, runtime_paths):
+        ws_id = "e" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text("# Database\nDB_HOST=localhost\nDB_PORT=5432\n")
+
+        resp = client.get(
+            f"/api/v1/images/git/workspace/{ws_id}/env",
+            params={"template_path": ".env.example"},
+        )
+        body = resp.json()
+        assert body["template_variables"][0]["comment"] == "Database"
+        assert body["template_variables"][1]["comment"] == ""
+
+    def test_quoted_values_stripped(self, client, runtime_paths):
+        ws_id = "f" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / ".env.example").write_text('SECRET="my secret"\n')
+
+        resp = client.get(
+            f"/api/v1/images/git/workspace/{ws_id}/env",
+            params={"template_path": ".env.example"},
+        )
+        body = resp.json()
+        assert body["template_variables"][0]["value"] == "my secret"
+
+    def test_subdirectory_template_target_path(self, client, runtime_paths):
+        ws_id = "1" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / "backend").mkdir()
+        (ws_path / "backend" / ".env.sample").write_text("PORT=3000\n")
+
+        resp = client.get(
+            f"/api/v1/images/git/workspace/{ws_id}/env",
+            params={"template_path": "backend/.env.sample"},
+        )
+        body = resp.json()
+        assert body["target_path"] == "backend/.env"

@@ -6,12 +6,15 @@ import { formatTime } from '@/lib/format';
 import type {
   BuildFromWorkspacePayload,
   ComposeSource,
+  EnvVariable,
   GitClonePayload,
   TaskRecord,
   TaskResponse,
   WorkspaceComposeActionPayload,
   WorkspaceComposeInfo,
   WorkspaceComposeUpdatePayload,
+  WorkspaceEnvInfo,
+  WorkspaceEnvUpdatePayload,
   WorkspaceInfo,
   WorkspaceSummary,
 } from '@/lib/types';
@@ -39,6 +42,9 @@ interface WorkspacePanelProps {
   syncWorkspace: (id: string) => Promise<TaskResponse>;
   buildFromWorkspace: (id: string, payload: BuildFromWorkspacePayload) => Promise<TaskResponse>;
   deleteWorkspace: (id: string) => Promise<void>;
+  getWorkspaceEnv: (id: string, templatePath?: string) => Promise<WorkspaceEnvInfo>;
+  saveWorkspaceEnv: (id: string, payload: WorkspaceEnvUpdatePayload) => Promise<{ workspace_id: string; template_path: string; target_path: string }>;
+  clearWorkspaceEnv: (id: string, templatePath: string) => Promise<{ deleted: boolean }>;
 }
 
 const SKELETON_ROWS = 4;
@@ -55,6 +61,9 @@ export function WorkspacePanel({
   syncWorkspace,
   buildFromWorkspace,
   deleteWorkspace,
+  getWorkspaceEnv,
+  saveWorkspaceEnv,
+  clearWorkspaceEnv,
 }: WorkspacePanelProps) {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,6 +81,11 @@ export function WorkspacePanel({
   const [composeContent, setComposeContent] = useState('');
   const [composeProjectName, setComposeProjectName] = useState('');
   const [composeCustomExists, setComposeCustomExists] = useState(false);
+
+  const [envInfo, setEnvInfo] = useState<WorkspaceEnvInfo | null>(null);
+  const [envTemplatePath, setEnvTemplatePath] = useState('');
+  const [envFormValues, setEnvFormValues] = useState<Record<string, string>>({});
+  const [envLoading, setEnvLoading] = useState(false);
 
   async function refreshList() {
     setLoading(true);
@@ -92,6 +106,82 @@ export function WorkspacePanel({
     setComposeCustomExists(false);
   }
 
+  function resetEnvState() {
+    setEnvInfo(null);
+    setEnvTemplatePath('');
+    setEnvFormValues({});
+  }
+
+  function initEnvForm(variables: EnvVariable[]) {
+    const values: Record<string, string> = {};
+    for (const v of variables) {
+      values[v.key] = v.value;
+    }
+    setEnvFormValues(values);
+  }
+
+  async function loadEnvInfo(workspaceId: string, templatePath?: string) {
+    setEnvLoading(true);
+    try {
+      const info = await getWorkspaceEnv(workspaceId, templatePath);
+      setEnvInfo(info);
+      if (info.selected_template) {
+        setEnvTemplatePath(info.selected_template);
+      }
+      const vars = info.custom_exists ? info.custom_variables : info.template_variables;
+      initEnvForm(vars);
+    } catch (error) {
+      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '加载环境变量失败' });
+    } finally {
+      setEnvLoading(false);
+    }
+  }
+
+  async function saveEnv() {
+    if (!workspace || !envInfo?.selected_template) return;
+    setWorking(true);
+    try {
+      const templateVars = envInfo.template_variables;
+      const lines: string[] = [];
+      for (const v of templateVars) {
+        if (v.comment) {
+          for (const line of v.comment.split('\n')) {
+            lines.push(`# ${line}`);
+          }
+        }
+        lines.push(`${v.key}=${envFormValues[v.key] ?? v.value}`);
+      }
+      const content = lines.join('\n') + '\n';
+      await saveWorkspaceEnv(workspace.workspace_id, { template_path: envInfo.selected_template, content });
+      await loadEnvInfo(workspace.workspace_id, envInfo.selected_template);
+      setNotice({ tone: 'success', text: '已保存环境变量' });
+    } catch (error) {
+      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '保存环境变量失败' });
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function resetEnvToTemplate() {
+    if (!workspace || !envInfo?.selected_template) return;
+    initEnvForm(envInfo.template_variables);
+    setNotice({ tone: 'info', text: '已恢复模板默认值（需点击保存生效）' });
+  }
+
+  async function deleteEnvFile() {
+    if (!workspace || !envInfo?.selected_template) return;
+    setWorking(true);
+    try {
+      await clearWorkspaceEnv(workspace.workspace_id, envInfo.selected_template);
+      await loadEnvInfo(workspace.workspace_id, envInfo.selected_template);
+      setNotice({ tone: 'success', text: '已删除自定义环境变量文件' });
+    } catch (error) {
+      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '删除环境变量失败' });
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function openWorkspace(workspaceId: string) {
     setWorking(true);
     setNotice(null);
@@ -102,9 +192,11 @@ export function WorkspacePanel({
         setBuildForm((prev) => ({ ...prev, dockerfile: info.dockerfiles[0] }));
       }
       resetComposeState();
+      resetEnvState();
       if (info.compose_files.length > 0) {
         await loadWorkspaceCompose(info.workspace_id, undefined, 'repository');
       }
+      await loadEnvInfo(info.workspace_id);
       setNotice({ tone: 'success', text: `已打开工作区：${info.workspace_id}` });
     } catch (error) {
       setNotice({ tone: 'error', text: error instanceof Error ? error.message : '打开工作区失败' });
@@ -297,6 +389,7 @@ export function WorkspacePanel({
         setWorkspace(null);
         setCloneTaskId('');
         resetComposeState();
+        resetEnvState();
       }
       await refreshList();
       setNotice({ tone: 'success', text: '工作区已清理' });
@@ -632,6 +725,65 @@ export function WorkspacePanel({
           ) : (
             <p className="muted helper-text">未发现 Compose 文件。</p>
           )}
+
+          {envInfo && envInfo.env_templates.length > 0 && envInfo.selected_template ? (
+            <div className="env-editor">
+              <h4>环境变量</h4>
+              <p className="muted helper-text">
+                发现 {envInfo.env_templates.length} 个模板文件，目标路径：{envInfo.target_path}
+                {envInfo.custom_exists ? '（已有自定义文件）' : ''}
+              </p>
+              {envInfo.env_templates.length > 1 ? (
+                <label>
+                  模板文件
+                  <select
+                    aria-label="模板文件"
+                    value={envTemplatePath}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setEnvTemplatePath(next);
+                      void loadEnvInfo(workspace.workspace_id, next);
+                    }}
+                    disabled={working || envLoading}
+                  >
+                    {envInfo.env_templates.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <div className="env-form">
+                {envInfo.template_variables.map((v) => (
+                  <div key={v.key} className="env-row">
+                    {v.comment ? <p className="muted helper-text">{v.comment}</p> : null}
+                    <label>
+                      <span className="mono">{v.key}</span>
+                      <input
+                        aria-label={v.key}
+                        value={envFormValues[v.key] ?? v.value}
+                        onChange={(event) => setEnvFormValues((prev) => ({ ...prev, [v.key]: event.target.value }))}
+                        placeholder={v.value}
+                        disabled={working || envLoading}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+              <div className="row-actions">
+                <button type="button" className="btn" onClick={() => void saveEnv()} disabled={working || envLoading}>
+                  保存环境变量
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => void resetEnvToTemplate()} disabled={working || envLoading}>
+                  恢复模板默认值
+                </button>
+                {envInfo.custom_exists ? (
+                  <button type="button" className="btn btn-danger btn-sm" onClick={() => void deleteEnvFile()} disabled={working || envLoading}>
+                    删除自定义文件
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>

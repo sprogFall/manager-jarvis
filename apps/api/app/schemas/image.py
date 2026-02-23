@@ -99,3 +99,14 @@ class WorkspaceComposeActionRequest(BaseModel):
     project_name: str | None = None
     force_recreate: bool = False
     confirm: bool = False
+
+
+class EnvVariable(BaseModel):
+    key: str
+    value: str
+    comment: str = ""
+
+
+class WorkspaceEnvUpdateRequest(BaseModel):
+    template_path: str = Field(min_length=1)
+    content: str

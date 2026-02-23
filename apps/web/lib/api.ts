@@ -22,6 +22,8 @@ import type {
   WorkspaceComposeInfo,
   WorkspaceComposeUpdatePayload,
   WorkspaceComposeUpdateResult,
+  WorkspaceEnvInfo,
+  WorkspaceEnvUpdatePayload,
   WorkspaceInfo,
   WorkspaceSummary,
 } from '@/lib/types';
@@ -314,6 +316,32 @@ export class ApiClient {
     return this.request<TaskResponse>(
       `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/build`,
       { method: 'POST', body: JSON.stringify(payload) },
+    );
+  }
+
+  getWorkspaceEnv(workspaceId: string, templatePath?: string): Promise<WorkspaceEnvInfo> {
+    const query = new URLSearchParams();
+    if (templatePath) {
+      query.set('template_path', templatePath);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return this.request<WorkspaceEnvInfo>(
+      `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/env${suffix}`,
+    );
+  }
+
+  saveWorkspaceEnv(workspaceId: string, payload: WorkspaceEnvUpdatePayload): Promise<{ workspace_id: string; template_path: string; target_path: string }> {
+    return this.request(
+      `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/env`,
+      { method: 'PUT', body: JSON.stringify(payload) },
+    );
+  }
+
+  clearWorkspaceEnv(workspaceId: string, templatePath: string): Promise<{ deleted: boolean }> {
+    const query = new URLSearchParams({ template_path: templatePath });
+    return this.request(
+      `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/env?${query.toString()}`,
+      { method: 'DELETE' },
     );
   }
 
