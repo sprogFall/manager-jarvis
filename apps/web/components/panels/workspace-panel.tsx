@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { formatTime } from '@/lib/format';
 import type {
   BuildFromWorkspacePayload,
+  BuildServiceInfo,
   ComposeSource,
   EnvVariable,
   GitClonePayload,
@@ -15,7 +16,9 @@ import type {
   WorkspaceComposeUpdatePayload,
   WorkspaceEnvInfo,
   WorkspaceEnvUpdatePayload,
+  WorkspaceImageTagsPayload,
   WorkspaceInfo,
+  WorkspaceProjectNamePayload,
   WorkspaceSummary,
 } from '@/lib/types';
 
@@ -45,6 +48,8 @@ interface WorkspacePanelProps {
   getWorkspaceEnv: (id: string, templatePath?: string) => Promise<WorkspaceEnvInfo>;
   saveWorkspaceEnv: (id: string, payload: WorkspaceEnvUpdatePayload) => Promise<{ workspace_id: string; template_path: string; target_path: string }>;
   clearWorkspaceEnv: (id: string, templatePath: string) => Promise<{ deleted: boolean }>;
+  saveWorkspaceProjectName: (id: string, payload: WorkspaceProjectNamePayload) => Promise<{ workspace_id: string; compose_path: string; project_name: string }>;
+  saveWorkspaceImageTags: (id: string, payload: WorkspaceImageTagsPayload) => Promise<{ workspace_id: string; compose_path: string; custom_compose_path: string }>;
 }
 
 const SKELETON_ROWS = 4;
@@ -64,6 +69,8 @@ export function WorkspacePanel({
   getWorkspaceEnv,
   saveWorkspaceEnv,
   clearWorkspaceEnv,
+  saveWorkspaceProjectName,
+  saveWorkspaceImageTags,
 }: WorkspacePanelProps) {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +88,8 @@ export function WorkspacePanel({
   const [composeContent, setComposeContent] = useState('');
   const [composeProjectName, setComposeProjectName] = useState('');
   const [composeCustomExists, setComposeCustomExists] = useState(false);
+  const [composeBuildServices, setComposeBuildServices] = useState<BuildServiceInfo[]>([]);
+  const [imageTagsForm, setImageTagsForm] = useState<Record<string, string>>({});
 
   const [envInfo, setEnvInfo] = useState<WorkspaceEnvInfo | null>(null);
   const [envTemplatePath, setEnvTemplatePath] = useState('');
@@ -104,6 +113,8 @@ export function WorkspacePanel({
     setComposeContent('');
     setComposeProjectName('');
     setComposeCustomExists(false);
+    setComposeBuildServices([]);
+    setImageTagsForm({});
   }
 
   function resetEnvState() {
@@ -283,6 +294,12 @@ export function WorkspacePanel({
       setComposeContent(compose.content);
       setComposeProjectName(compose.project_name);
       setComposeCustomExists(compose.custom_exists);
+      setComposeBuildServices(compose.build_services ?? []);
+      const tags: Record<string, string> = {};
+      for (const svc of compose.build_services ?? []) {
+        if (svc.image) tags[svc.name] = svc.image;
+      }
+      setImageTagsForm(tags);
     } catch (error) {
       setNotice({ tone: 'error', text: error instanceof Error ? error.message : '加载 Compose 失败' });
     } finally {
@@ -336,6 +353,48 @@ export function WorkspacePanel({
       setNotice({ tone: 'success', text: `Compose ${action} 任务已创建：${result.task_id}` });
     } catch (error) {
       setNotice({ tone: 'error', text: error instanceof Error ? error.message : 'Compose 操作失败' });
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function saveProjectName() {
+    if (!workspace || !composeProjectName.trim()) return;
+    setWorking(true);
+    try {
+      await saveWorkspaceProjectName(workspace.workspace_id, {
+        compose_path: composePath || undefined,
+        project_name: composeProjectName.trim(),
+      });
+      setNotice({ tone: 'success', text: '项目名已保存' });
+    } catch (error) {
+      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '保存项目名失败' });
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function saveImageTags() {
+    if (!workspace || !composePath.trim()) return;
+    const tags: Record<string, string> = {};
+    for (const svc of composeBuildServices) {
+      const val = imageTagsForm[svc.name]?.trim();
+      if (val) tags[svc.name] = val;
+    }
+    if (Object.keys(tags).length === 0) {
+      setNotice({ tone: 'error', text: '请至少填写一个镜像名' });
+      return;
+    }
+    setWorking(true);
+    try {
+      await saveWorkspaceImageTags(workspace.workspace_id, {
+        compose_path: composePath,
+        image_tags: tags,
+      });
+      await loadWorkspaceCompose(workspace.workspace_id, composePath, 'custom');
+      setNotice({ tone: 'success', text: '镜像名已保存到自定义 Compose' });
+    } catch (error) {
+      setNotice({ tone: 'error', text: error instanceof Error ? error.message : '保存镜像名失败' });
     } finally {
       setWorking(false);
     }
@@ -680,14 +739,24 @@ export function WorkspacePanel({
                     disabled={working || composeLoading}
                   />
                 </label>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => void loadWorkspaceCompose(workspace.workspace_id, composePath || undefined, composeSource)}
-                  disabled={working || composeLoading}
-                >
-                  {composeLoading ? '加载中...' : '重新加载Compose'}
-                </button>
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void saveProjectName()}
+                    disabled={working || composeLoading || !composeProjectName.trim()}
+                  >
+                    保存项目名
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void loadWorkspaceCompose(workspace.workspace_id, composePath || undefined, composeSource)}
+                    disabled={working || composeLoading}
+                  >
+                    {composeLoading ? '加载中...' : '重新加载Compose'}
+                  </button>
+                </div>
               </div>
               <label className="compose-content-label">
                 Compose内容
@@ -707,6 +776,33 @@ export function WorkspacePanel({
                   使用仓库Compose
                 </button>
               </div>
+              {composeBuildServices.length > 0 ? (
+                <div className="image-tags-editor">
+                  <h4>构建镜像名</h4>
+                  <p className="muted helper-text">
+                    为含 build 的服务自定义镜像名，保存后写入自定义 Compose 副本。
+                  </p>
+                  <div className="form-grid">
+                    {composeBuildServices.map((svc) => (
+                      <label key={svc.name}>
+                        <span className="mono">{svc.name}</span>
+                        <input
+                          aria-label={`镜像名-${svc.name}`}
+                          value={imageTagsForm[svc.name] ?? ''}
+                          onChange={(event) => setImageTagsForm((prev) => ({ ...prev, [svc.name]: event.target.value }))}
+                          placeholder={`${composeProjectName}-${svc.name}`}
+                          disabled={working || composeLoading}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="row-actions">
+                    <button type="button" className="btn" onClick={() => void saveImageTags()} disabled={working || composeLoading}>
+                      保存镜像名
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <div className="row-actions">
                 <button type="button" className="btn btn-subtle" onClick={() => void runComposeAction('up')} disabled={working || composeLoading}>
                   Compose启动

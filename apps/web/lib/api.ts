@@ -24,7 +24,9 @@ import type {
   WorkspaceComposeUpdateResult,
   WorkspaceEnvInfo,
   WorkspaceEnvUpdatePayload,
+  WorkspaceImageTagsPayload,
   WorkspaceInfo,
+  WorkspaceProjectNamePayload,
   WorkspaceSummary,
 } from '@/lib/types';
 
@@ -342,6 +344,26 @@ export class ApiClient {
     return this.request(
       `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/env?${query.toString()}`,
       { method: 'DELETE' },
+    );
+  }
+
+  saveWorkspaceProjectName(
+    workspaceId: string,
+    payload: WorkspaceProjectNamePayload,
+  ): Promise<{ workspace_id: string; compose_path: string; project_name: string }> {
+    return this.request(
+      `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/project-name`,
+      { method: 'PUT', body: JSON.stringify(payload) },
+    );
+  }
+
+  saveWorkspaceImageTags(
+    workspaceId: string,
+    payload: WorkspaceImageTagsPayload,
+  ): Promise<WorkspaceComposeUpdateResult> {
+    return this.request<WorkspaceComposeUpdateResult>(
+      `/api/v1/images/git/workspace/${encodeURIComponent(workspaceId)}/compose/image-tags`,
+      { method: 'PUT', body: JSON.stringify(payload) },
     );
   }
 

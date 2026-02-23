@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse, urlunparse
 
+import yaml
+
 from app.core.config import get_settings
 from app.services.proxy_service import build_proxy_env
 
@@ -203,18 +205,37 @@ class GitService:
         workspace_path = self.get_workspace_path(workspace_id)
         meta_path = workspace_path / ".jarvis" / "workspace.json"
         meta_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = self._read_workspace_meta(workspace_path)
+        existing.update({
+            "workspace_id": workspace_id,
+            "repo_url": repo_url,
+            "branch": branch,
+            "created_at": existing.get("created_at", datetime.now(timezone.utc).isoformat()),
+        })
         meta_path.write_text(
-            json.dumps(
-                {
-                    "workspace_id": workspace_id,
-                    "repo_url": repo_url,
-                    "branch": branch,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                },
-                ensure_ascii=False,
-            ),
+            json.dumps(existing, ensure_ascii=False),
             encoding="utf-8",
         )
+
+    def save_workspace_project_name(
+        self, workspace_id: str, compose_path: str | None, project_name: str
+    ) -> dict[str, str]:
+        workspace_path = self.get_workspace_path(workspace_id)
+        meta_path = workspace_path / ".jarvis" / "workspace.json"
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta = self._read_workspace_meta(workspace_path)
+        project_names: dict[str, str] = meta.get("project_names", {})
+        if not isinstance(project_names, dict):
+            project_names = {}
+        key = compose_path or "__default__"
+        project_names[key] = project_name
+        meta["project_names"] = project_names
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        return {
+            "workspace_id": workspace_id,
+            "compose_path": key,
+            "project_name": project_name,
+        }
 
     def _read_workspace_meta(self, workspace_path: Path) -> dict:
         meta_path = workspace_path / ".jarvis" / "workspace.json"
@@ -255,14 +276,20 @@ class GitService:
         else:
             raise ValueError(f"Unsupported compose source: {source}")
         content = target.read_text(encoding="utf-8")
+        meta = self._read_workspace_meta(workspace_path)
+        project_names = meta.get("project_names", {})
+        saved_name = project_names.get(selected_compose) if isinstance(project_names, dict) else None
+        project_name = saved_name or self.suggest_project_name(workspace_id, selected_compose)
+        build_services = self.extract_build_services(content)
         return {
             "workspace_id": workspace_id,
             "compose_files": compose_files,
             "selected_compose": selected_compose,
             "source": source,
             "custom_exists": custom_exists,
-            "project_name": self.suggest_project_name(workspace_id, selected_compose),
+            "project_name": project_name,
             "content": content,
+            "build_services": build_services,
         }
 
     def save_workspace_compose_override(
@@ -328,6 +355,38 @@ class GitService:
         if not cleaned:
             cleaned = "app"
         return f"ws-{workspace_id[:8]}-{cleaned}"[:50]
+
+    @staticmethod
+    def extract_build_services(content: str) -> list[dict]:
+        try:
+            data = yaml.safe_load(content)
+        except yaml.YAMLError:
+            return []
+        if not isinstance(data, dict):
+            return []
+        services = data.get("services")
+        if not isinstance(services, dict):
+            return []
+        result: list[dict] = []
+        for name, svc in services.items():
+            if not isinstance(svc, dict):
+                continue
+            if "build" in svc:
+                result.append({"name": name, "image": svc.get("image")})
+        return result
+
+    @staticmethod
+    def inject_image_tags(content: str, image_tags: dict[str, str]) -> str:
+        data = yaml.safe_load(content)
+        if not isinstance(data, dict):
+            raise ValueError("Invalid compose content")
+        services = data.get("services")
+        if not isinstance(services, dict):
+            raise ValueError("No services in compose content")
+        for svc_name, tag in image_tags.items():
+            if svc_name in services and isinstance(services[svc_name], dict):
+                services[svc_name]["image"] = tag
+        return yaml.dump(data, default_flow_style=False, allow_unicode=True)
 
     def sync_workspace(
         self,

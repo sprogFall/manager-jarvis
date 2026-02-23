@@ -506,6 +506,134 @@ class TestGitServiceUnit:
         assert not target.exists()
 
 
+class TestProjectNamePersistence:
+    def test_save_and_get_project_name(self, client, runtime_paths):
+        ws_id = "a" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / "compose.yaml").write_text("services:\n  web:\n    image: nginx\n")
+
+        resp = client.put(
+            f"/api/v1/images/git/workspace/{ws_id}/project-name",
+            json={"compose_path": "compose.yaml", "project_name": "my-custom-name"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["project_name"] == "my-custom-name"
+
+        compose_resp = client.get(
+            f"/api/v1/images/git/workspace/{ws_id}/compose",
+            params={"compose_path": "compose.yaml"},
+        )
+        assert compose_resp.status_code == 200
+        assert compose_resp.json()["project_name"] == "my-custom-name"
+
+    def test_unsaved_project_name_falls_back_to_suggest(self, client, runtime_paths):
+        ws_id = "b" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / "compose.yaml").write_text("services:\n  web:\n    image: nginx\n")
+
+        compose_resp = client.get(f"/api/v1/images/git/workspace/{ws_id}/compose")
+        assert compose_resp.status_code == 200
+        project_name = compose_resp.json()["project_name"]
+        assert project_name.startswith("ws-")
+
+    def test_save_project_name_unit(self, runtime_paths):
+        ws_id = "c" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / "compose.yaml").write_text("services:\n  web:\n    image: nginx\n")
+
+        service = GitService()
+        service.save_workspace_project_name(ws_id, "compose.yaml", "my-project")
+        info = service.read_workspace_compose(ws_id, "compose.yaml")
+        assert info["project_name"] == "my-project"
+
+
+class TestBuildServicesExtraction:
+    def test_extract_build_services_basic(self):
+        content = "services:\n  app:\n    build: .\n  db:\n    image: postgres\n"
+        result = GitService.extract_build_services(content)
+        assert len(result) == 1
+        assert result[0]["name"] == "app"
+        assert result[0]["image"] is None
+
+    def test_extract_build_services_with_image(self):
+        content = "services:\n  web:\n    build: .\n    image: myapp:v1\n"
+        result = GitService.extract_build_services(content)
+        assert len(result) == 1
+        assert result[0]["name"] == "web"
+        assert result[0]["image"] == "myapp:v1"
+
+    def test_extract_build_services_no_builds(self):
+        content = "services:\n  db:\n    image: postgres\n"
+        result = GitService.extract_build_services(content)
+        assert result == []
+
+    def test_extract_build_services_dict_build(self):
+        content = "services:\n  api:\n    build:\n      context: ./backend\n      dockerfile: Dockerfile\n"
+        result = GitService.extract_build_services(content)
+        assert len(result) == 1
+        assert result[0]["name"] == "api"
+
+    def test_inject_image_tags(self):
+        content = "services:\n  app:\n    build: .\n  db:\n    image: postgres\n"
+        result = GitService.inject_image_tags(content, {"app": "myapp:v2"})
+        import yaml
+
+        parsed = yaml.safe_load(result)
+        assert parsed["services"]["app"]["image"] == "myapp:v2"
+        assert parsed["services"]["app"]["build"] == "."
+        assert parsed["services"]["db"]["image"] == "postgres"
+
+    def test_inject_image_tags_overwrites_existing(self):
+        content = "services:\n  web:\n    build: .\n    image: old:v1\n"
+        result = GitService.inject_image_tags(content, {"web": "new:v2"})
+        import yaml
+
+        parsed = yaml.safe_load(result)
+        assert parsed["services"]["web"]["image"] == "new:v2"
+
+    def test_get_compose_returns_build_services(self, client, runtime_paths):
+        ws_id = "d" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / "compose.yaml").write_text(
+            "services:\n  app:\n    build: .\n  db:\n    image: postgres\n"
+        )
+
+        resp = client.get(f"/api/v1/images/git/workspace/{ws_id}/compose")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "build_services" in body
+        assert len(body["build_services"]) == 1
+        assert body["build_services"][0]["name"] == "app"
+
+    def test_put_image_tags_saves_custom_compose(self, client, runtime_paths):
+        ws_id = "e" * 32
+        ws_path: Path = runtime_paths["workspaces"] / ws_id
+        ws_path.mkdir(parents=True, exist_ok=True)
+        (ws_path / "compose.yaml").write_text(
+            "services:\n  app:\n    build: .\n  db:\n    image: postgres\n"
+        )
+
+        resp = client.put(
+            f"/api/v1/images/git/workspace/{ws_id}/compose/image-tags",
+            json={"compose_path": "compose.yaml", "image_tags": {"app": "myapp:v2"}},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["workspace_id"] == ws_id
+
+        custom_resp = client.get(
+            f"/api/v1/images/git/workspace/{ws_id}/compose",
+            params={"compose_path": "compose.yaml", "source": "custom"},
+        )
+        assert custom_resp.status_code == 200
+        assert "myapp:v2" in custom_resp.json()["content"]
+
+
 class TestWorkspaceEnvEndpoint:
     def test_discover_multiple_env_templates(self, client, runtime_paths):
         ws_id = "a" * 32

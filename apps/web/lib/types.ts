@@ -140,6 +140,11 @@ export interface LoadFromUrlPayload {
 
 export type ComposeSource = 'repository' | 'custom';
 
+export interface BuildServiceInfo {
+  name: string;
+  image: string | null;
+}
+
 export interface WorkspaceComposeInfo {
   workspace_id: string;
   compose_files: string[];
@@ -148,6 +153,7 @@ export interface WorkspaceComposeInfo {
   custom_exists: boolean;
   project_name: string;
   content: string;
+  build_services: BuildServiceInfo[];
 }
 
 export interface WorkspaceComposeUpdatePayload {
@@ -204,4 +210,15 @@ export interface WorkspaceEnvInfo {
 export interface WorkspaceEnvUpdatePayload {
   template_path: string;
   content: string;
+}
+
+export interface WorkspaceProjectNamePayload {
+  compose_path?: string;
+  project_name: string;
+}
+
+export interface WorkspaceImageTagsPayload {
+  compose_path?: string;
+  source?: string;
+  image_tags: Record<string, string>;
 }

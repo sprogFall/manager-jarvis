@@ -13,6 +13,7 @@ dependencies = [
   "passlib[bcrypt]>=1.7.4",
   "docker>=7.1.0",
   "python-multipart>=0.0.18",
+  "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

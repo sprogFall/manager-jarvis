@@ -22,7 +22,9 @@ from app.schemas.image import (
     WorkspaceComposeInfo,
     WorkspaceComposeUpdateRequest,
     WorkspaceEnvUpdateRequest,
+    WorkspaceImageTagsRequest,
     WorkspaceInfo,
+    WorkspaceProjectNameRequest,
     WorkspaceSummary,
 )
 from app.services.docker_service import DockerService
@@ -543,6 +545,73 @@ def clear_workspace_env(
         resource_id=workspace_id,
         user=user,
         detail={"template_path": template_path, "deleted": result["deleted"]},
+    )
+    return result
+
+
+@router.put("/git/workspace/{workspace_id}/project-name")
+def save_workspace_project_name(
+    workspace_id: str,
+    payload: WorkspaceProjectNameRequest,
+    user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    service = GitService()
+    try:
+        result = service.save_workspace_project_name(
+            workspace_id,
+            compose_path=payload.compose_path,
+            project_name=payload.project_name,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    write_audit_log(
+        db,
+        action="image.git.project_name.save",
+        resource_type="image",
+        resource_id=workspace_id,
+        user=user,
+        detail={"compose_path": result["compose_path"], "project_name": result["project_name"]},
+    )
+    return result
+
+
+@router.put("/git/workspace/{workspace_id}/compose/image-tags")
+def save_workspace_image_tags(
+    workspace_id: str,
+    payload: WorkspaceImageTagsRequest,
+    user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    service = GitService()
+    try:
+        info = service.read_workspace_compose(
+            workspace_id, compose_path=payload.compose_path, source="repository"
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    injected = service.inject_image_tags(info["content"], payload.image_tags)
+    try:
+        result = service.save_workspace_compose_override(
+            workspace_id, content=injected, compose_path=payload.compose_path
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    write_audit_log(
+        db,
+        action="image.git.compose.image_tags",
+        resource_type="image",
+        resource_id=workspace_id,
+        user=user,
+        detail={"compose_path": result["compose_path"], "image_tags": payload.image_tags},
     )
     return result
 

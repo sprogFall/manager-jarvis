@@ -78,6 +78,11 @@ class LoadFromUrlRequest(BaseModel):
     auth_token: str | None = None  # Bearer token for private GitHub/Gitee release assets
 
 
+class BuildServiceInfo(BaseModel):
+    name: str
+    image: str | None = None
+
+
 class WorkspaceComposeInfo(BaseModel):
     workspace_id: str
     compose_files: list[str]
@@ -86,6 +91,7 @@ class WorkspaceComposeInfo(BaseModel):
     custom_exists: bool = False
     project_name: str
     content: str
+    build_services: list[BuildServiceInfo] = Field(default_factory=list)
 
 
 class WorkspaceComposeUpdateRequest(BaseModel):
@@ -110,3 +116,14 @@ class EnvVariable(BaseModel):
 class WorkspaceEnvUpdateRequest(BaseModel):
     template_path: str = Field(min_length=1)
     content: str
+
+
+class WorkspaceProjectNameRequest(BaseModel):
+    compose_path: str | None = None
+    project_name: str = Field(min_length=1)
+
+
+class WorkspaceImageTagsRequest(BaseModel):
+    compose_path: str | None = None
+    source: str = "custom"
+    image_tags: dict[str, str]

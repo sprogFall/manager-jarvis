@@ -39,6 +39,7 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
       custom_exists: false,
       project_name: 'ws-demo',
       content: 'services: {}',
+      build_services: [],
     } satisfies WorkspaceComposeInfo),
     saveWorkspaceCompose: vi.fn().mockResolvedValue({ compose_path: 'compose.yaml' }),
     clearWorkspaceCompose: vi.fn().mockResolvedValue({ deleted: true }),
@@ -59,6 +60,8 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
     } satisfies WorkspaceEnvInfo),
     saveWorkspaceEnv: vi.fn().mockResolvedValue({ workspace_id: '', template_path: '', target_path: '' }),
     clearWorkspaceEnv: vi.fn().mockResolvedValue({ deleted: false }),
+    saveWorkspaceProjectName: vi.fn().mockResolvedValue({ workspace_id: '', compose_path: '', project_name: '' }),
+    saveWorkspaceImageTags: vi.fn().mockResolvedValue({ workspace_id: '', compose_path: '', custom_compose_path: '' }),
     ...overrides,
   };
 }
@@ -186,5 +189,136 @@ describe('WorkspacePanel', () => {
     await waitFor(() => {
       expect(saveWorkspaceEnv).toHaveBeenCalled();
     });
+  });
+
+  it('calls saveWorkspaceProjectName on save project name button click', async () => {
+    const user = userEvent.setup();
+    const saveWorkspaceProjectName = vi.fn().mockResolvedValue({ workspace_id: '', compose_path: '', project_name: '' });
+    const props = defaultProps({
+      loadWorkspaces: vi.fn().mockResolvedValue([
+        {
+          workspace_id: 'a'.repeat(32),
+          repo_url: 'https://github.com/user/repo.git',
+          branch: 'main',
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+          compose_files_count: 1,
+        } satisfies WorkspaceSummary,
+      ]),
+      saveWorkspaceProjectName,
+    });
+
+    render(<WorkspacePanel {...props} />);
+    await user.click(await screen.findByRole('button', { name: '打开' }));
+    await screen.findByText('当前工作区');
+
+    await user.click(screen.getByRole('button', { name: '保存项目名' }));
+    await waitFor(() => {
+      expect(saveWorkspaceProjectName).toHaveBeenCalledWith('a'.repeat(32), {
+        compose_path: 'compose.yaml',
+        project_name: 'ws-demo',
+      });
+    });
+  });
+
+  it('shows build image tags form when build_services present', async () => {
+    const user = userEvent.setup();
+    const composeInfo: WorkspaceComposeInfo = {
+      workspace_id: 'a'.repeat(32),
+      compose_files: ['compose.yaml'],
+      selected_compose: 'compose.yaml',
+      source: 'repository',
+      custom_exists: false,
+      project_name: 'ws-demo',
+      content: 'services:\n  app:\n    build: .\n',
+      build_services: [{ name: 'app', image: null }],
+    };
+    const props = defaultProps({
+      loadWorkspaces: vi.fn().mockResolvedValue([
+        {
+          workspace_id: 'a'.repeat(32),
+          repo_url: 'https://github.com/user/repo.git',
+          branch: 'main',
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+          compose_files_count: 1,
+        } satisfies WorkspaceSummary,
+      ]),
+      getWorkspaceCompose: vi.fn().mockResolvedValue(composeInfo),
+    });
+
+    render(<WorkspacePanel {...props} />);
+    await user.click(await screen.findByRole('button', { name: '打开' }));
+
+    expect(await screen.findByText('构建镜像名')).toBeInTheDocument();
+    expect(screen.getByText('app')).toBeInTheDocument();
+    expect(screen.getByLabelText('镜像名-app')).toBeInTheDocument();
+  });
+
+  it('calls saveWorkspaceImageTags on save image tags button click', async () => {
+    const user = userEvent.setup();
+    const saveWorkspaceImageTags = vi.fn().mockResolvedValue({ workspace_id: '', compose_path: '', custom_compose_path: '' });
+    const composeInfo: WorkspaceComposeInfo = {
+      workspace_id: 'a'.repeat(32),
+      compose_files: ['compose.yaml'],
+      selected_compose: 'compose.yaml',
+      source: 'repository',
+      custom_exists: false,
+      project_name: 'ws-demo',
+      content: 'services:\n  app:\n    build: .\n',
+      build_services: [{ name: 'app', image: null }],
+    };
+    const props = defaultProps({
+      loadWorkspaces: vi.fn().mockResolvedValue([
+        {
+          workspace_id: 'a'.repeat(32),
+          repo_url: 'https://github.com/user/repo.git',
+          branch: 'main',
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+          compose_files_count: 1,
+        } satisfies WorkspaceSummary,
+      ]),
+      getWorkspaceCompose: vi.fn().mockResolvedValue(composeInfo),
+      saveWorkspaceImageTags,
+    });
+
+    render(<WorkspacePanel {...props} />);
+    await user.click(await screen.findByRole('button', { name: '打开' }));
+    await screen.findByText('构建镜像名');
+
+    const input = screen.getByLabelText('镜像名-app');
+    await user.clear(input);
+    await user.type(input, 'myapp:v2');
+
+    await user.click(screen.getByRole('button', { name: '保存镜像名' }));
+    await waitFor(() => {
+      expect(saveWorkspaceImageTags).toHaveBeenCalledWith('a'.repeat(32), {
+        compose_path: 'compose.yaml',
+        image_tags: { app: 'myapp:v2' },
+      });
+    });
+  });
+
+  it('hides build image tags when no build services', async () => {
+    const user = userEvent.setup();
+    const props = defaultProps({
+      loadWorkspaces: vi.fn().mockResolvedValue([
+        {
+          workspace_id: 'a'.repeat(32),
+          repo_url: 'https://github.com/user/repo.git',
+          branch: 'main',
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+          compose_files_count: 1,
+        } satisfies WorkspaceSummary,
+      ]),
+    });
+
+    render(<WorkspacePanel {...props} />);
+    await user.click(await screen.findByRole('button', { name: '打开' }));
+    await screen.findByText('当前工作区');
+
+    expect(screen.queryByText('构建镜像名')).not.toBeInTheDocument();
   });
 });

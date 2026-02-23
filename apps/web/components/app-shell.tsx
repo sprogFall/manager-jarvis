@@ -206,6 +206,7 @@ const noClient = {
     custom_exists: false,
     project_name: 'ws-demo',
     content: '',
+    build_services: [],
   }),
   saveWorkspaceCompose: async () => ({ workspace_id: '', compose_path: 'compose.yaml', custom_compose_path: '' }),
   clearWorkspaceCompose: async () => ({ workspace_id: '', compose_path: 'compose.yaml', deleted: false }),
@@ -226,6 +227,8 @@ const noClient = {
   }),
   saveWorkspaceEnv: async () => ({ workspace_id: '', template_path: '', target_path: '' }),
   clearWorkspaceEnv: async () => ({ deleted: false }),
+  saveWorkspaceProjectName: async () => ({ workspace_id: '', compose_path: '', project_name: '' }),
+  saveWorkspaceImageTags: async () => ({ workspace_id: '', compose_path: '', custom_compose_path: '' }),
   loadFromUrl: async () => ({ task_id: 'task-demo' }),
   getStacks: async () => [],
   runStackAction: async () => ({ task_id: 'task-demo' }),
@@ -336,6 +339,8 @@ export function AppShell({ client, onLogout }: AppShellProps) {
           getWorkspaceEnv={(id, templatePath) => api.getWorkspaceEnv(id, templatePath)}
           saveWorkspaceEnv={(id, payload) => api.saveWorkspaceEnv(id, payload)}
           clearWorkspaceEnv={(id, templatePath) => api.clearWorkspaceEnv(id, templatePath)}
+          saveWorkspaceProjectName={(id, payload) => api.saveWorkspaceProjectName(id, payload)}
+          saveWorkspaceImageTags={(id, payload) => api.saveWorkspaceImageTags(id, payload)}
         />
       );
     }
