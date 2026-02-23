@@ -74,10 +74,11 @@ describe('formatPorts', () => {
 });
 
 describe('formatTime', () => {
-  it('formats date with zh-CN locale', () => {
+  it('formats UTC time to Beijing timezone (Asia/Shanghai)', () => {
+    // UTC 08:30 → 北京时间 16:30
     const result = formatTime('2026-01-15T08:30:00Z');
     expect(result).toContain('2026');
-    expect(result).not.toBe('-');
+    expect(result).toContain('16:30:00');
   });
 
   it('returns dash for null', () => {

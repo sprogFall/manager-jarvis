@@ -15,7 +15,8 @@ export function formatTime(value: string | null): string {
   if (!value) return '-';
   const time = new Date(value);
   if (Number.isNaN(time.getTime())) return value;
-  return `${time.toLocaleDateString('zh-CN')} ${time.toLocaleTimeString('zh-CN')}`;
+  const opts: Intl.DateTimeFormatOptions = { timeZone: 'Asia/Shanghai' };
+  return `${time.toLocaleDateString('zh-CN', opts)} ${time.toLocaleTimeString('zh-CN', opts)}`;
 }
 
 const STATUS_MAP: Record<string, string> = {
