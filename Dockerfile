@@ -50,7 +50,8 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    FRONTEND_DIST_DIR=/app/web-dist
+    FRONTEND_DIST_DIR=/app/web-dist \
+    TZ=Asia/Shanghai
 
 # 从官方镜像复制 docker CLI + compose 插件
 COPY --from=docker:27-cli /usr/local/bin/docker /usr/local/bin/docker

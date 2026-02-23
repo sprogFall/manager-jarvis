@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import { AppShell } from '@/components/app-shell';
@@ -8,7 +7,6 @@ import { ApiClient, apiBaseUrl } from '@/lib/api';
 import { clearSession, loadSession } from '@/lib/session';
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [session, setSession] = useState(loadSession());
 
   const client = useMemo(() => {
@@ -20,9 +18,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!session.accessToken) {
-      router.replace('/login');
+      window.location.replace('/login');
     }
-  }, [session.accessToken, router]);
+  }, [session.accessToken]);
 
   function handleLogout() {
     clearSession();
@@ -30,7 +28,11 @@ export default function DashboardPage() {
   }
 
   if (!session.accessToken) {
-    return null;
+    return (
+      <main className="login-layout">
+        <p className="muted">正在跳转到登录页...</p>
+      </main>
+    );
   }
 
   return (

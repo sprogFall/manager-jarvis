@@ -17,6 +17,7 @@ services:
       - EXPORT_DIR=/data/exports
       - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-2048}
       - ENABLE_WEB_TERMINAL=${ENABLE_WEB_TERMINAL:-true}
+      - TZ=${TZ:-Asia/Shanghai}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/data
