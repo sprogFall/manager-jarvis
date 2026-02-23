@@ -1,6 +1,8 @@
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 from app.models.task import TaskRecord
 from app.services.stack_service import StackService
@@ -221,3 +223,91 @@ class TestStacksAPI:
 
         resp = client.get("/api/v1/stacks/demo")
         assert resp.status_code == 404
+
+
+class TestComposeProxyEnv:
+    def test_run_command_passes_env_to_subprocess(self, monkeypatch):
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["env"] = kwargs.get("env")
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr(stack_module, "subprocess", _make_subprocess_mock(fake_run))
+
+        service = StackService()
+        proxy_env = {**os.environ, "HTTP_PROXY": "http://proxy:7890", "HTTPS_PROXY": "http://proxy:7890"}
+        service._run_command(["echo", "test"], env=proxy_env)
+        assert captured["env"]["HTTP_PROXY"] == "http://proxy:7890"
+
+    def test_run_command_stream_passes_env_to_popen(self, monkeypatch):
+        captured = {}
+
+        class FakeProc:
+            def __init__(self, env):
+                captured["env"] = env
+                read_fd, write_fd = os.pipe()
+                os.write(write_fd, b"done\n")
+                os.close(write_fd)
+                self.stdout = os.fdopen(read_fd, "rb")
+                self.returncode = 0
+
+            def poll(self):
+                return 0
+
+            def wait(self):
+                return 0
+
+        def fake_popen(cmd, **kwargs):
+            return FakeProc(kwargs.get("env"))
+
+        monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+        service = StackService()
+        proxy_env = {**os.environ, "HTTPS_PROXY": "http://proxy:7890"}
+        service._run_command_stream(["echo", "test"], log_writer=lambda x: None, env=proxy_env)
+        assert captured["env"]["HTTPS_PROXY"] == "http://proxy:7890"
+
+    def test_task_workspace_compose_action_injects_proxy(self, monkeypatch):
+        captured = {}
+
+        def fake_run_compose_action(self, **kwargs):
+            captured["env"] = kwargs.get("env")
+            return {"stack": "test", "action": "up", "exit_code": 0, "stdout": "", "stderr": "", "command": ""}
+
+        monkeypatch.setattr(StackService, "run_compose_action", fake_run_compose_action)
+
+        with patch("app.services.proxy_service.get_runtime_proxy_url", return_value="http://my-proxy:7890"):
+            from app.services.task_service import task_workspace_compose_action
+
+            task_workspace_compose_action({
+                "compose_file": "/tmp/compose.yaml",
+                "project_directory": "/tmp",
+                "project_name": "test",
+                "action": "up",
+                "force_recreate": False,
+            })
+
+        assert captured["env"] is not None
+        assert captured["env"]["HTTP_PROXY"] == "http://my-proxy:7890"
+
+    def test_task_stack_action_injects_proxy(self, monkeypatch):
+        captured = {}
+
+        def fake_run_action(self, name, action, force_recreate=False, *, log_writer=None, env=None):
+            captured["env"] = env
+            return {"stack": name, "action": action, "exit_code": 0, "stdout": "", "stderr": "", "command": ""}
+
+        monkeypatch.setattr(StackService, "run_action", fake_run_action)
+
+        with patch("app.services.proxy_service.get_runtime_proxy_url", return_value="http://my-proxy:7890"):
+            from app.services.task_service import task_stack_action
+
+            task_stack_action({
+                "name": "demo",
+                "action": "up",
+                "force_recreate": False,
+            })
+
+        assert captured["env"] is not None
+        assert captured["env"]["HTTP_PROXY"] == "http://my-proxy:7890"

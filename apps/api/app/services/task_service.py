@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import traceback
 import uuid
@@ -229,13 +230,18 @@ def task_save_image(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def task_stack_action(params: dict[str, Any]) -> dict[str, Any]:
+    from app.services.proxy_service import build_proxy_env, get_runtime_proxy_url
+
     service = StackService()
     log_writer = _make_task_log_writer(params.get("_task_id") if isinstance(params.get("_task_id"), str) else None)
+    proxy_url = get_runtime_proxy_url()
+    env = build_proxy_env({**os.environ}, proxy_url) if proxy_url else None
     return service.run_action(
         params["name"],
         params["action"],
         params.get("force_recreate", False),
         log_writer=log_writer,
+        env=env,
     )
 
 
@@ -375,10 +381,14 @@ def task_load_image_from_url(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def task_workspace_compose_action(params: dict[str, Any]) -> dict[str, Any]:
+    from app.services.proxy_service import build_proxy_env, get_runtime_proxy_url
+
     service = StackService()
     log_writer = _make_task_log_writer(params.get("_task_id") if isinstance(params.get("_task_id"), str) else None)
     compose_file = Path(params["compose_file"])
     project_directory = Path(params["project_directory"]) if params.get("project_directory") else None
+    proxy_url = get_runtime_proxy_url()
+    env = build_proxy_env({**os.environ}, proxy_url) if proxy_url else None
     return service.run_compose_action(
         project_name=params["project_name"],
         compose_file=compose_file,
@@ -386,6 +396,7 @@ def task_workspace_compose_action(params: dict[str, Any]) -> dict[str, Any]:
         force_recreate=params.get("force_recreate", False),
         project_directory=project_directory,
         log_writer=log_writer,
+        env=env,
     )
 
 
